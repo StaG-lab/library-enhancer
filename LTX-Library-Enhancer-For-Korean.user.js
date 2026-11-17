@@ -19,7 +19,7 @@
 // @resource     LTX_CSS https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/css/ltx-enhancer.css
 // @run-at       document-start
 // ==/UserScript==
-/* global DecompressionStream, GM_getResourceText, GM_addStyle, unsafeWindow, LtxUtil, LtxUI, LtxActor, LtxCard, LtxIDB */
+/* global DecompressionStream, LtxUtil, LtxUI, LtxActor, LtxCard, LtxIDB */
 (function() {
     'use strict';
 
