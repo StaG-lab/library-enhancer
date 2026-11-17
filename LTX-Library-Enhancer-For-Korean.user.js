@@ -11,8 +11,8 @@
 // @grant        GM_getResourceText
 // @grant        GM_addStyle
 // @grant        unsafeWindow
-// @updateURL    https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/LTX-Library-Enhancer-For-Korean-user.js
-// @downloadURL  https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/LTX-Library-Enhancer-For-Korean-user.js
+// @updateURL    https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/LTX-Library-Enhancer-For-Korean.user.js
+// @downloadURL  https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/LTX-Library-Enhancer-For-Korean.user.js
 // @require      https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/js/01-ltx-utils-storage.js
 // @require      https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/js/02-ltx-actor-avdbs.js
 // @require      https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/js/03-ltx-card-dom.js
