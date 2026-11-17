@@ -232,22 +232,29 @@ const LtxCard = (() => {
 
                 // 리스트 생성 엔드포인트(/api/lists, POST) 감지
                 if (method === 'POST' && /\/api\/lists(?:\/)?(?:\?|$)/.test(urlStr) && typeof init?.body === 'string') {
-                    const mergedWant = getMergedWantSet();
-                    if (mergedWant.size > 0) {
-                        const bodyObj = JSON.parse(init.body);
-                        // Vue가 전송하는 품번 배열 필드(codes 또는 items) 확인 후 누락된 다른 명의 찜 품번 병합
-                        const targetField = Array.isArray(bodyObj.codes)
-                            ? 'codes'
-                            : (Array.isArray(bodyObj.items) ? 'items' : null);
+                    const bodyObj = JSON.parse(init.body);
+                    const targetField = Array.isArray(bodyObj.codes)
+                        ? 'codes'
+                        : (Array.isArray(bodyObj.items) ? 'items' : null);
 
-                        if (targetField) {
-                            const combinedSet = new Set(bodyObj[targetField].map(LtxUtil.normalizeCode).filter(Boolean));
-                            for (const code of mergedWant) {
+                    if (targetField) {
+                        const combinedSet = new Set(bodyObj[targetField].map(LtxUtil.normalizeCode).filter(Boolean));
+                        const dialogContainer = document.querySelector('form > div.editor-body > div:nth-child(4) > div');
+
+                        if (dialogContainer && dialogContainer.dataset.ltxWantInjected === 'true') {
+                            // 다이얼로그에 최종 남아있는 모든 품번(사용자가 ×로 지운 건 제외)을 반영
+                            for (const el of dialogContainer.children) {
+                                const m = (el.textContent || '').match(/([A-Za-z0-9]+-\d+|[A-Za-z]{2,}\d{3,})/);
+                                if (m) combinedSet.add(LtxUtil.normalizeCode(m[1]));
+                            }
+                        } else {
+                            for (const code of getMergedWantSet()) {
                                 combinedSet.add(code);
                             }
-                            bodyObj[targetField] = Array.from(combinedSet);
-                            init = { ...init, body: JSON.stringify(bodyObj) };
                         }
+
+                        bodyObj[targetField] = Array.from(combinedSet);
+                        init = { ...init, body: JSON.stringify(bodyObj) };
                     }
                 }
             } catch (e) {
@@ -659,6 +666,26 @@ const LtxCard = (() => {
         const batchCntEl = batchBtn?.querySelector('b');
         const resultSpan = mainEl.querySelector('div.bar-end > span.result');
 
+        // 4) #want 뷰에서 main > div.bar > button.tool.save-want 숫자 동기화
+        const saveWantBtn = mainEl.querySelector('div.bar > button.tool.save-want');
+        if (saveWantBtn) {
+            const wantCount = getMergedWantSet().size;
+            const badge = saveWantBtn.querySelector('b, span.count, i');
+            if (badge) {
+                if (badge.dataset.ltxOrigText === undefined) badge.dataset.ltxOrigText = badge.textContent;
+                if (badge.textContent !== String(wantCount)) badge.textContent = String(wantCount);
+            } else {
+                // 숫자만 텍스트 노드로 들어있는 경우 치환
+                for (const node of saveWantBtn.childNodes) {
+                    if (node.nodeType === Node.TEXT_NODE && /\d+/.test(node.textContent)) {
+                        const nextText = node.textContent.replace(/\d+/, String(wantCount));
+                        if (node.textContent !== nextText) node.textContent = nextText;
+                        break;
+                    }
+                }
+            }
+        }
+
         if (!active) {
             [allEl, okEl, penEl, batchCntEl].forEach(el => {
                 if (el && el.dataset.ltxOrigText !== undefined) { el.textContent = el.dataset.ltxOrigText; delete el.dataset.ltxOrigText; }
@@ -736,6 +763,82 @@ const LtxCard = (() => {
         }
     }
 
+    function syncSaveWantDialogItems() {
+        const container = document.querySelector('form > div.editor-body > div:nth-child(4) > div');
+        if (!container || container.dataset.ltxWantInjected === 'true') return;
+
+        // 현재 다이얼로그가 '보고 싶음(want)'에서 열린 리스트 생성 창인지 확인
+        const mergedWant = getMergedWantSet();
+        if (mergedWant.size === 0) return;
+
+        // 컨테이너 내부에 이미 렌더링된 품번 목록 추출
+        const existingItems = Array.from(container.children);
+        if (existingItems.length === 0) return;
+
+        const existingCodes = new Set();
+        for (const el of existingItems) {
+            const m = (el.textContent || '').match(/([A-Za-z0-9]+-\d+|[A-Za-z]{2,}\d{3,})/);
+            if (m) existingCodes.add(LtxUtil.normalizeCode(m[1]));
+        }
+
+        // 다이얼로그에 표시된 항목 중 하나라도 want 목록과 겹치면 save-want 다이얼로그로 판정
+        const isWantDialog = Array.from(existingCodes).some(c => mergedWant.has(c));
+        if (!isWantDialog) return;
+
+        const missingCodes = Array.from(mergedWant).filter(c => !existingCodes.has(c));
+        if (missingCodes.length === 0) {
+            container.dataset.ltxWantInjected = 'true';
+            return;
+        }
+
+        // 기존 항목 DOM(칩/행)의 스타일과 Vue scope 속성을 그대로 복제하여 누락된 품번 추가
+        const templateEl = existingItems[0];
+        for (const code of missingCodes) {
+            const clone = templateEl.cloneNode(true);
+            clone.dataset.ltxInjectedDialogCode = code;
+
+            // 텍스트 노드 중 원본 품번 부분을 새 품번으로 교체
+            const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT, null);
+            let replaced = false;
+            let txtNode;
+            while ((txtNode = walker.nextNode())) {
+                if (/([A-Za-z0-9]+-\d+|[A-Za-z]{2,}\d{3,})/.test(txtNode.nodeValue)) {
+                    txtNode.nodeValue = txtNode.nodeValue.replace(/([A-Za-z0-9]+-\d+|[A-Za-z]{2,}\d{3,})/, code);
+                    replaced = true;
+                    break;
+                }
+            }
+            if (!replaced) clone.textContent = code;
+
+            // 복제된 항목 내 삭제(×) 버튼 클릭 시 DOM에서 제거 및 getMergedWantSet 동기화
+            const removeBtn = clone.querySelector('button');
+            if (removeBtn) {
+                removeBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    clone.remove();
+                    updateDialogCountLabels(container);
+                });
+            }
+
+            container.appendChild(clone);
+        }
+
+        container.dataset.ltxWantInjected = 'true';
+        updateDialogCountLabels(container);
+    }
+
+    function updateDialogCountLabels(container) {
+        const form = container.closest('form');
+        if (!form) return;
+        const currentCount = container.children.length;
+        // 다이얼로그 라벨(예: "작품 (12편)" 또는 "12개")의 숫자 갱신
+        const labelEl = form.querySelector('div.editor-body > div:nth-child(4) label, div.editor-body > div:nth-child(4) > span');
+        if (labelEl && /\d+/.test(labelEl.textContent)) {
+            labelEl.textContent = labelEl.textContent.replace(/\d+/, String(currentCount));
+        }
+    }
+
     return {
         MAX_EXT_SITES,
         getExtSites: () => extSites,
@@ -752,6 +855,7 @@ const LtxCard = (() => {
         resetExtraWant,
         syncHeaderWantCounter,
         injectAliasActorCards,
-        syncBarStatsAndActions
+        syncBarStatsAndActions,
+        syncSaveWantDialogItems
     };
 })();
