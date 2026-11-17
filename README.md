@@ -10,6 +10,9 @@
 1. 브라우저에 **[Tampermonkey](https://www.tampermonkey.net/)** 확장 프로그램을 설치합니다.
 2. 아래 원클릭 설치 링크를 클릭하면 Tampermonkey 설치 화면이 자동으로 열립니다.
    * 👉 **[LTX Library Enhancer For Korean 설치하기](https://stag-lab.github.io/library-enhancer/LTX-Library-Enhancer-For-Korean.user.js)**
+   * 만약 설치 창 대신 소스 코드 텍스트 화면이 열린다면:
+     * 해당 페이지의 주소창 URL을 복사합니다.
+     * **Tampermonkey 대시보드 → 유틸리티(Utilities) → URL에서 가져오기(Import from URL)** 칸에 주소를 붙여넣고 **설치**를 클릭합니다.
 3. 설치 창에서 **설치(Install)** 버튼을 누른 뒤 `https://ltxlib.dpdns.org/` 페이지를 새로고침합니다.
 4. 최초 설치 후 **자동 스크롤 기능** 을 실행해서 전체 데이터를 한번 불러와야 모든 기능을 제대로 이용할 수 있습니다.
 > **업데이트 방법:** Tampermonkey 대시보드에서 본 스크립트의 **최근 업데이트 일시** 을 클릭하면 GitHub에 올라온 최신 버전으로 자동 업데이트됩니다.
