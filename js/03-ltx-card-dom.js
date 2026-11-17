@@ -220,6 +220,53 @@ const LtxCard = (() => {
         };
     })();
 
+    // main > div.bar > button.tool.save-want 클릭 시 서버로 전송되는 리스트 생성 요청에 통합 찜 목록(getMergedWantSet) 병합
+    (() => {
+        const origFetch = window.fetch;
+        window.fetch = async function (resource, init) {
+            try {
+                const urlStr = typeof resource === 'string'
+                    ? resource
+                    : (resource instanceof Request ? resource.url : '');
+                const method = (init?.method || (resource instanceof Request ? resource.method : 'GET')).toUpperCase();
+
+                // 리스트 생성 엔드포인트(/api/lists, POST) 감지
+                if (method === 'POST' && /\/api\/lists(?:\/)?(?:\?|$)/.test(urlStr) && typeof init?.body === 'string') {
+                    const mergedWant = getMergedWantSet();
+                    if (mergedWant.size > 0) {
+                        const bodyObj = JSON.parse(init.body);
+                        // Vue가 전송하는 품번 배열 필드(codes 또는 items) 확인 후 누락된 다른 명의 찜 품번 병합
+                        const targetField = Array.isArray(bodyObj.codes)
+                            ? 'codes'
+                            : (Array.isArray(bodyObj.items) ? 'items' : null);
+
+                        if (targetField) {
+                            const combinedSet = new Set(bodyObj[targetField].map(LtxUtil.normalizeCode).filter(Boolean));
+                            for (const code of mergedWant) {
+                                combinedSet.add(code);
+                            }
+                            bodyObj[targetField] = Array.from(combinedSet);
+                            init = { ...init, body: JSON.stringify(bodyObj) };
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('[LTX-Card] save-want 리스트 병합 후킹 중 예외:', e);
+            }
+            return origFetch.apply(this, [resource, init]);
+        };
+    })();
+
+    document.addEventListener('click', (e) => {
+        const saveWantBtn = e.target.closest('main.main div.bar button.tool.save-want');
+        if (!saveWantBtn) return;
+
+        const merged = Array.from(getMergedWantSet());
+        if (merged.length > 0) {
+            LtxUtil.store.set('ltx.want', merged);
+        }
+    }, true);
+
     function syncHeaderWantCounter() {
         const count = getMergedWantSet().size;
         const btn = document.querySelector('header.header button.want');
