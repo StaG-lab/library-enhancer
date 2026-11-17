@@ -200,7 +200,7 @@ const LtxCard = (() => {
     // Vue의 localStorage['ltx.want'] 덮어쓰기 후킹
     (() => {
         const origSetItem = Storage.prototype.setItem;
-        Storage.prototype.setItem = function(key, value) {
+        Storage.prototype.setItem = function (key, value) {
             origSetItem.apply(this, arguments);
             if (this === localStorage && key === 'ltx.want') {
                 try {
@@ -215,7 +215,7 @@ const LtxCard = (() => {
                         if (changed) saveExtraWantSet(extraSet);
                         requestAnimationFrame(syncHeaderWantCounter);
                     }
-                } catch (e) {}
+                } catch (e) { }
             }
         };
     })();
@@ -351,20 +351,33 @@ const LtxCard = (() => {
         }
 
         card.querySelector('button.tool.want')?.addEventListener('click', (e) => {
+            e.preventDefault();
             e.stopPropagation();
-            const nextState = !getMergedWantSet().has(code);
-            const extra = getExtraWantSet();
-            nextState ? extra.add(code) : extra.delete(code);
-            saveExtraWantSet(extra);
 
+            const extra = getExtraWantSet();
             const nativeArr = LtxUtil.store.get('ltx.want', []);
             const nativeSet = new Set(Array.isArray(nativeArr) ? nativeArr.map(LtxUtil.normalizeCode) : []);
-            nextState ? nativeSet.add(code) : nativeSet.delete(code);
-            LtxUtil.store.set('ltx.want', Array.from(nativeSet));
+
+            const isCurrentlyWanted = extra.has(code) || nativeSet.has(code);
+            const nextState = !isCurrentlyWanted;
+
+            if (nextState) {
+                extra.add(code);
+            } else {
+                extra.delete(code);
+                // 만약 Vue 원본 목록에도 포함되어 있었다면 제거
+                if (nativeSet.has(code)) {
+                    const filteredNative = (Array.isArray(nativeArr) ? nativeArr : [])
+                        .filter(item => LtxUtil.normalizeCode(item) !== code);
+                    LtxUtil.store.set('ltx.want', filteredNative);
+                }
+            }
+            saveExtraWantSet(extra);
 
             const btn = e.currentTarget;
             btn.classList.toggle('on', nextState);
             btn.setAttribute('aria-pressed', String(nextState));
+            btn.setAttribute('title', nextState ? '보고 싶음에서 제거' : '보고 싶음에 추가');
             btn.querySelector('svg')?.setAttribute('fill', nextState ? 'currentColor' : 'none');
 
             syncHeaderWantCounter();
