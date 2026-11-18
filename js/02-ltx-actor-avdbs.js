@@ -85,7 +85,7 @@ const LtxActor = (() => {
     }
 
     function setSearchInsertMode(mode) {
-        try { localStorage.setItem(SEARCH_INSERT_MODE_KEY, mode); } catch (e) {}
+        try { localStorage.setItem(SEARCH_INSERT_MODE_KEY, mode); } catch (e) { }
     }
 
     function formatRepBadgeLabel(repName) {
@@ -97,7 +97,12 @@ const LtxActor = (() => {
             : `대표: ${cleanRep}`;
     }
 
-    function saveActorCache() {
+    // [Perf] Debounced persistence: instead of serializing + writing localStorage on every
+    // actor fetch (O(n²) for batch lookups), batch writes into a single trailing save.
+    let _saveActorCacheTimer = null;
+    const SAVE_DEBOUNCE_MS = 400;
+
+    function doSaveActorCache() {
         const obj = {};
         for (const [k, v] of actorCache.entries()) {
             if (v && !v.notFound) obj[k] = { ...v, updatedAt: v.updatedAt || Date.now() };
@@ -105,6 +110,12 @@ const LtxActor = (() => {
         LtxUtil.store.set(ACTOR_CACHE_KEY, obj);
         updateStatsUI();
         refreshAllTagNames();
+        _saveActorCacheTimer = null;
+    }
+
+    function saveActorCache() {
+        if (_saveActorCacheTimer !== null) clearTimeout(_saveActorCacheTimer);
+        _saveActorCacheTimer = setTimeout(doSaveActorCache, SAVE_DEBOUNCE_MS);
     }
 
     function saveNoDataCache() {
@@ -555,7 +566,7 @@ const LtxActor = (() => {
                     if (!parsed || typeof parsed !== 'object') continue;
                     const src = (parsed.actors && typeof parsed.actors === 'object') ? parsed.actors
                         : (parsed.actorName && typeof parsed.actorName === 'object') ? parsed.actorName
-                        : (!parsed.items && !parsed.extSites && !parsed.noDataActors ? parsed : {});
+                            : (!parsed.items && !parsed.extSites && !parsed.noDataActors ? parsed : {});
                     for (const [k, v] of Object.entries(src)) {
                         if (!v || typeof v !== 'object') continue;
                         const jName = String(v.jName || k || '').trim();
@@ -648,7 +659,7 @@ const LtxActor = (() => {
             if (targets.has('counts')) { LtxUtil.store.remove(ACTOR_NAV_COUNT_CACHE_KEY); actorCountsMap.clear(); }
             if (targets.has('extsites')) LtxCard.resetExtSites();
             if (targets.has('want')) LtxCard.resetExtraWant();
-            if (targets.has('idb')) await LtxIDB.clearAll().catch(() => {});
+            if (targets.has('idb')) await LtxIDB.clearAll().catch(() => { });
             if (targets.size === 7) {
                 LtxUtil.store.remove(SEARCH_INSERT_MODE_KEY);
                 pendingQueue.length = 0;

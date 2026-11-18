@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LTX Library Enhancer For Korean Users
 // @namespace    http://tampermonkey.net/
-// @version      1.1.2
+// @version      1.1.3
 // @description  배우 한글/영문/초성 검색, 다중 명의(대표 이름) 통합 검색, JSON/CSV 내보내기, 외부 검색 사이트(extLink) 기능
 // @author       You
 // @match        https://ltxlib.dpdns.org/*
@@ -13,11 +13,11 @@
 // @grant        unsafeWindow
 // @updateURL    https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/LTX-Library-Enhancer-For-Korean.user.js
 // @downloadURL  https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/LTX-Library-Enhancer-For-Korean.user.js
-// @require      https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/js/01-ltx-utils-storage.js?v=1.1.2
-// @require      https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/js/02-ltx-actor-avdbs.js?v=1.1.2
-// @require      https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/js/03-ltx-card-dom.js?v=1.1.2
-// @require      https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/js/04-ltx-modals.js?v=1.1.2
-// @resource     LTX_CSS https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/css/ltx-enhancer.css?v=1.1.2
+// @require      https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/js/01-ltx-utils-storage.js?v=1.1.3
+// @require      https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/js/02-ltx-actor-avdbs.js?v=1.1.3
+// @require      https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/js/03-ltx-card-dom.js?v=1.1.3
+// @require      https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/js/04-ltx-modals.js?v=1.1.3
+// @resource     LTX_CSS https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/css/ltx-enhancer.css?v=1.1.3
 // @run-at       document-start
 // ==/UserScript==
 /* global DecompressionStream, LtxUtil, LtxUI, LtxActor, LtxCard, LtxIDB */
@@ -466,11 +466,14 @@
         window.addEventListener('hashchange', onRoute);
 
         let scheduled = false;
+        // Scope observation to the card grid container (main.main) rather than the whole body,
+        // so dynamic DOM changes outside .main/.grid don't re-trigger runEnhancements().
+        const observerTarget = document.querySelector('main.main') || document.body;
         new MutationObserver(() => {
             if (LtxUI.isModalOpen || scheduled) return;
             scheduled = true;
             requestAnimationFrame(() => { runEnhancements(); scheduled = false; });
-        }).observe(document.body, { childList: true, subtree: true });
+        }).observe(observerTarget, { childList: true, subtree: true });
 
         // 페이지 전역 window 디버깅 헬퍼 노출
         const targetWin = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;

@@ -703,10 +703,20 @@ const LtxModal = (() => {
             resultsEl.appendChild(frag);
         }
 
+        // ArrowUp/Down navigation should NOT rebuild the whole dropdown; only toggle
+        // the .selected class and scroll the current row into view.
+        function refreshSelection() {
+            resultsEl.querySelectorAll('.ltx-koen-item').forEach((el, i) => {
+                el.classList.toggle('selected', i === selectedIndex);
+            });
+            const sel = resultsEl.querySelector('.ltx-koen-item.selected');
+            if (sel) sel.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        }
+
         searchInput.addEventListener('input', () => { selectedIndex = 0; renderAutocomplete(); });
         searchInput.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowDown' && currentMatches.length) { e.preventDefault(); selectedIndex = (selectedIndex + 1) % currentMatches.length; renderAutocomplete(); }
-            else if (e.key === 'ArrowUp' && currentMatches.length) { e.preventDefault(); selectedIndex = (selectedIndex - 1 + currentMatches.length) % currentMatches.length; renderAutocomplete(); }
+            if (e.key === 'ArrowDown' && currentMatches.length) { e.preventDefault(); selectedIndex = (selectedIndex + 1) % currentMatches.length; refreshSelection(); }
+            else if (e.key === 'ArrowUp' && currentMatches.length) { e.preventDefault(); selectedIndex = (selectedIndex - 1 + currentMatches.length) % currentMatches.length; refreshSelection(); }
             else if (e.key === 'Enter' && currentMatches[selectedIndex]) { e.preventDefault(); selectActorAndClose(currentMatches[selectedIndex]); }
         });
         renderAutocomplete();
