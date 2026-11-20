@@ -561,7 +561,13 @@ const LtxModal = (() => {
                         <span class="ltx-audit-field-head">배우 (actors, 쉼표 구분) <em class="ltx-audit-state ${ma ? 'missing' : 'filled'}">${ma ? '누락' : '자동완성'}</em></span>
                         <input type="text" class="ltx-actor-input edit-actors" value="${LtxUtil.escapeHtml(actorsStr)}" placeholder="예: 波多野結衣, 大槻ひびき" />
                         <div class="ltx-audit-actor-ac-wrap">
-                            <input type="text" class="ltx-actor-input edit-actor-ac" placeholder="저장된 배우 캐시에서 자동완성 추가 (한글/초성/영문/일본어)…" />
+                            <div class="ltx-audit-actor-ac-input-box">
+                                <svg class="ltx-audit-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                <input type="text" class="ltx-actor-input edit-actor-ac" placeholder="저장된 배우 캐시에서 자동완성 추가 (한글/초성/영문/일본어)…" />
+                            </div>
                             <div class="ltx-audit-actor-ac-list" style="display:none;"></div>
                         </div>
                     </div>
@@ -717,6 +723,13 @@ const LtxModal = (() => {
                     }
                 }
 
+                if (typeof LtxCard !== 'undefined') {
+                    LtxCard.refreshUserPatchedCards?.();
+                    LtxCard.injectAliasActorCards?.(openListPickerModal, deps.notifyFn);
+                    LtxCard.syncActorPanelUserActors?.();
+                }
+                if (typeof LtxActor !== 'undefined') LtxActor.refreshAllTagNames?.();
+
                 if (deps.updateMainBtnFn) deps.updateMainBtnFn();
                 if (deps.notifyFn) deps.notifyFn(`${item.code} 저장 완료`);
                 editingCode = null;
@@ -840,6 +853,12 @@ const LtxModal = (() => {
                     }
                     if (!combined.length) { alert('복원할 직접 입력 데이터가 파일에 없습니다.'); return; }
                     const restoredCount = await LtxIDB.importUserEditedItems(combined);
+                    if (typeof LtxCard !== 'undefined') {
+                        LtxCard.refreshUserPatchedCards?.();
+                        LtxCard.injectAliasActorCards?.(openListPickerModal, deps.notifyFn);
+                        LtxCard.syncActorPanelUserActors?.();
+                    }
+                    if (typeof LtxActor !== 'undefined') LtxActor.refreshAllTagNames?.();
                     if (deps.updateMainBtnFn) deps.updateMainBtnFn();
                     if (deps.notifyFn) deps.notifyFn(`직접 입력 데이터 ${restoredCount}건 복원 완료`);
                     renderAudit();

@@ -108,8 +108,182 @@ const LtxCard = (() => {
         }
     }
 
+    function getUserEditedEntry(code) {
+        if (typeof LtxIDB === 'undefined' || typeof LtxIDB.getUserEditedMap !== 'function') return null;
+        const map = LtxIDB.getUserEditedMap();
+        const norm = LtxUtil.normalizeCode(code);
+        if (!norm) return null;
+        if (map[norm]) return map[norm];
+        const rawTrim = String(code || '').trim();
+        if (map[rawTrim]) return map[rawTrim];
+        for (const [k, v] of Object.entries(map)) {
+            if (LtxUtil.normalizeCode(k) === norm) return v;
+        }
+        return null;
+    }
+
+    function applyUserDataToCard(card) {
+        if (!card || !card.dataset.code) return;
+        const rawCode = card.dataset.code.trim();
+        const normCode = LtxUtil.normalizeCode(rawCode);
+        const entry = getUserEditedEntry(rawCode);
+        if (!entry) return;
+
+        // 1) cover 누락 보완
+        if (typeof entry.cover === 'string' && entry.cover.trim()) {
+            const coverEl = card.querySelector('.cover');
+            const existingImg = coverEl?.querySelector('.cover-btn img');
+            const hasValidImg = existingImg && existingImg.getAttribute('src');
+            if (coverEl && (!hasValidImg || existingImg.closest('[data-ltx-user-patched="cover"]'))) {
+                coverEl.querySelector('.empty')?.remove();
+                coverEl.querySelector('.cover-btn[data-ltx-user-patched="cover"]')?.remove();
+
+                const coverBtn = document.createElement('button');
+                coverBtn.className = 'cover-btn';
+                coverBtn.type = 'button';
+                coverBtn.dataset.ltxUserPatched = 'cover';
+                copyScopeAttributes(coverEl, coverBtn);
+
+                const imgEl = document.createElement('img');
+                imgEl.loading = 'lazy';
+                imgEl.decoding = 'async';
+                imgEl.src = entry.cover.trim();
+                imgEl.alt = '';
+                imgEl.setAttribute('referrerpolicy', 'no-referrer');
+                copyScopeAttributes(coverEl, imgEl);
+
+                imgEl.addEventListener('load', () => { imgEl.classList.add('in'); coverEl.classList.remove('loading'); });
+                imgEl.addEventListener('error', () => { coverEl.classList.remove('loading'); coverBtn.remove(); });
+
+                coverEl.classList.add('loading');
+                coverBtn.appendChild(imgEl);
+                const codeBtn = coverEl.querySelector('button.code');
+                if (codeBtn) coverEl.insertBefore(coverBtn, codeBtn);
+                else coverEl.appendChild(coverBtn);
+            }
+        }
+
+        const bodyEl = card.querySelector('.body');
+        if (!bodyEl) return;
+
+        // 2) title 누락 보완
+        if (typeof entry.title === 'string' && entry.title.trim()) {
+            const titleH3 = bodyEl.querySelector('h3.title');
+            const titleBtn = titleH3?.querySelector('button.title-btn');
+            const currentTitle = (titleBtn ? titleBtn.textContent : titleH3?.textContent || '').trim();
+            const isMissingTitle = !currentTitle || LtxUtil.normalizeCode(currentTitle) === normCode || currentTitle === '(제목 없음)';
+            if (titleH3 && (isMissingTitle || titleH3.dataset.ltxUserPatched === 'title')) {
+                const nextTitle = entry.title.trim();
+                titleH3.setAttribute('title', nextTitle);
+                titleH3.dataset.ltxUserPatched = 'title';
+                if (titleBtn) titleBtn.textContent = nextTitle;
+                else titleH3.textContent = nextTitle;
+            }
+        }
+
+        // 3) actors 누락 보완
+        if (Array.isArray(entry.actors) && entry.actors.length > 0) {
+            let whoEl = bodyEl.querySelector('.who');
+            if (!whoEl) {
+                whoEl = document.createElement('div');
+                whoEl.className = 'who';
+                copyScopeAttributes(bodyEl, whoEl);
+                const titleEl = bodyEl.querySelector('h3.title');
+                if (titleEl) titleEl.insertAdjacentElement('afterend', whoEl);
+                else bodyEl.prepend(whoEl);
+            }
+            const existingNativeTags = whoEl.querySelectorAll('.tags:not([data-ltx-user-patched="actors"]) .tag');
+            if (existingNativeTags.length === 0) {
+                whoEl.querySelector('.tags[data-ltx-user-patched="actors"]')?.remove();
+                const tagsDiv = document.createElement('div');
+                tagsDiv.className = 'tags';
+                tagsDiv.dataset.ltxUserPatched = 'actors';
+                copyScopeAttributes(whoEl, tagsDiv);
+
+                for (const actor of entry.actors) {
+                    const cleanActor = String(actor || '').trim();
+                    if (!cleanActor) continue;
+                    const tagSpan = document.createElement('span');
+                    tagSpan.className = 'tag';
+                    copyScopeAttributes(whoEl, tagSpan);
+
+                    const tagBtn = document.createElement('button');
+                    tagBtn.className = 'tag-name';
+                    tagBtn.setAttribute('lang', 'ja');
+                    tagBtn.type = 'button';
+                    tagBtn.setAttribute('title', cleanActor);
+                    tagBtn.textContent = cleanActor;
+                    copyScopeAttributes(whoEl, tagBtn);
+
+                    tagBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const targetJ = (tagBtn.dataset.ltxJname || tagBtn.getAttribute('title') || tagBtn.textContent || '').trim();
+                        if (targetJ) {
+                            const url = new URL(location.href);
+                            url.pathname = '/';
+                            url.search = `?actor=${encodeURIComponent(targetJ)}`;
+                            url.hash = '';
+                            history.pushState(null, '', url.toString());
+                            window.dispatchEvent(new PopStateEvent('popstate'));
+                        }
+                    });
+
+                    tagSpan.appendChild(tagBtn);
+                    tagsDiv.appendChild(tagSpan);
+                }
+                if (tagsDiv.children.length > 0) {
+                    whoEl.prepend(tagsDiv);
+                    if (typeof LtxActor !== 'undefined') {
+                        tagsDiv.querySelectorAll(LtxActor.ACTOR_SPAN_SELECTOR).forEach(LtxActor.bindActorSpan);
+                    }
+                }
+            }
+        }
+
+        // 4) link 누락 보완
+        if (typeof entry.link === 'string' && entry.link.trim()) {
+            const existingCopy = bodyEl.querySelector('.copy-btn:not([data-ltx-user-patched="link"])');
+            if (!existingCopy) {
+                bodyEl.querySelector('.copy-btn[data-ltx-user-patched="link"]')?.remove();
+                let actionsEl = bodyEl.querySelector('.actions');
+                if (!actionsEl) {
+                    actionsEl = document.createElement('div');
+                    actionsEl.className = 'actions';
+                    copyScopeAttributes(bodyEl, actionsEl);
+                    bodyEl.appendChild(actionsEl);
+                }
+                const linkStr = entry.link.trim();
+                const sizeLabel = linkStr.startsWith('ed2k://')
+                    ? `ed2k · ${((Number(linkStr.split('|', 4)[3]) || 0) / (1024 ** 3)).toFixed(1)}G`
+                    : '마그넷';
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'btn copy-btn';
+                copyBtn.type = 'button';
+                copyBtn.title = linkStr;
+                copyBtn.textContent = `복사: ${sizeLabel}`;
+                copyBtn.dataset.ltxUserPatched = 'link';
+                copyScopeAttributes(actionsEl, copyBtn);
+
+                copyBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    if (await LtxUtil.copyText(linkStr)) {
+                        copyBtn.classList.add('done');
+                        setTimeout(() => copyBtn.classList.remove('done'), 1200);
+                    }
+                });
+                actionsEl.prepend(copyBtn);
+            }
+        }
+    }
+
+    function refreshUserPatchedCards() {
+        document.querySelectorAll('article.card').forEach(applyUserDataToCard);
+    }
+
     function modifyCard(card) {
-        if (card.dataset.processed || !card.dataset.code) return;
+        if (!card.dataset.code) return;
+        applyUserDataToCard(card);
+        if (card.dataset.processed) return;
         const dataCode = card.dataset.code.trim();
         const codeBtn = card.querySelector('button.code');
 
@@ -513,47 +687,58 @@ const LtxCard = (() => {
 
         const isWantView = location.hash === '#want';
         const params = new URLSearchParams(location.search);
-        const searchKeyword = (params.get('actor') || params.get('q') || '').trim();
+        const actorParam = (params.get('actor') || '').trim();
+        const qParam = (params.get('q') || '').trim();
+        const searchKeyword = actorParam || qParam;
         const insertMode = LtxActor.getSearchInsertMode();
 
         let gridEl = mainEl.querySelector('.grid');
         const emptyStage = mainEl.querySelector('.empty-stage');
 
+        const createFallbackGridStage = (attrName) => {
+            const gridStage = document.createElement('div');
+            gridStage.className = 'grid-stage';
+            gridStage.dataset[attrName] = 'true';
+            const newGrid = document.createElement('div');
+            newGrid.className = 'grid';
+            copyScopeAttributes(mainEl, gridStage);
+            copyScopeAttributes(mainEl, newGrid);
+            newGrid.style.display = 'grid';
+            newGrid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(230px, 1fr))';
+            newGrid.style.gap = '16px';
+            gridStage.appendChild(newGrid);
+            if (emptyStage) { emptyStage.style.display = 'none'; emptyStage.insertAdjacentElement('afterend', gridStage); }
+            else mainEl.appendChild(gridStage);
+            return newGrid;
+        };
+
         if (isWantView) {
+            mainEl.querySelectorAll('.grid-stage[data-ltx-search-stage="true"]').forEach(el => el.remove());
             const hasWantItems = getMergedWantSet().size > 0;
             if (!gridEl && hasWantItems) {
-                const gridStage = document.createElement('div');
-                gridStage.className = 'grid-stage';
-                gridStage.dataset.ltxWantStage = 'true';
-                gridEl = document.createElement('div');
-                gridEl.className = 'grid';
-                copyScopeAttributes(mainEl, gridStage);
-                copyScopeAttributes(mainEl, gridEl);
-                gridEl.style.display = 'grid';
-                gridEl.style.gridTemplateColumns = 'repeat(auto-fill, minmax(230px, 1fr))';
-                gridEl.style.gap = '16px';
-                gridStage.appendChild(gridEl);
-                if (emptyStage) { emptyStage.style.display = 'none'; emptyStage.insertAdjacentElement('afterend', gridStage); }
-                else mainEl.appendChild(gridStage);
+                gridEl = createFallbackGridStage('ltxWantStage');
             } else if (!hasWantItems) {
                 mainEl.querySelectorAll('.grid-stage[data-ltx-want-stage="true"]').forEach(el => el.remove());
                 if (emptyStage) emptyStage.style.display = '';
             }
         } else {
             mainEl.querySelectorAll('.grid-stage[data-ltx-want-stage="true"]').forEach(el => el.remove());
-            if (emptyStage) emptyStage.style.display = '';
             gridEl = mainEl.querySelector('.grid');
         }
 
-        if (!gridEl || gridEl.classList.contains('stale') || gridEl.getAttribute('aria-busy') === 'true') return;
+        if (gridEl && (gridEl.classList.contains('stale') || gridEl.getAttribute('aria-busy') === 'true')) return;
 
         const cleanupInjected = () => {
-            gridEl.querySelectorAll('article.card[data-ltx-alias-injected="true"]').forEach(el => el.remove());
+            mainEl.querySelectorAll('.grid-stage[data-ltx-search-stage="true"]').forEach(el => el.remove());
+            if (emptyStage && !isWantView) emptyStage.style.display = '';
+            const curGrid = mainEl.querySelector('.grid');
+            if (curGrid) curGrid.querySelectorAll('article.card[data-ltx-alias-injected="true"]').forEach(el => el.remove());
             lastInjectedSignature = '';
             syncBarStatsAndActions(notifyFn);
         };
 
         if (isWantView) {
+            if (!gridEl) return;
             const wantSet = getMergedWantSet();
             const sig = `want::${Array.from(wantSet).join(',')}`;
             if (lastInjectedSignature !== sig) {
@@ -598,18 +783,19 @@ const LtxCard = (() => {
             return;
         }
 
-        if (!searchKeyword || insertMode !== 'rep') { cleanupInjected(); return; }
-        const aliasNames = getAliasActorsByQuery(searchKeyword);
-        if (aliasNames.length <= 1) { cleanupInjected(); return; }
+        if (!searchKeyword) { cleanupInjected(); return; }
 
-        const sig = `${insertMode}::${searchKeyword}`;
+        const sig = `${insertMode}::${actorParam ? 'actor:' + actorParam : 'q:' + qParam}`;
         if (lastInjectedSignature !== sig) {
-            gridEl.querySelectorAll('article.card[data-ltx-alias-injected="true"]').forEach(el => el.remove());
+            mainEl.querySelectorAll('.grid-stage[data-ltx-search-stage="true"]').forEach(el => el.remove());
+            if (emptyStage) emptyStage.style.display = '';
+            gridEl = mainEl.querySelector('.grid');
+            if (gridEl) gridEl.querySelectorAll('article.card[data-ltx-alias-injected="true"]').forEach(el => el.remove());
             lastInjectedSignature = sig;
         }
 
         const existingCodes = new Set();
-        const allCards = Array.from(gridEl.querySelectorAll('article.card'));
+        const allCards = gridEl ? Array.from(gridEl.querySelectorAll('article.card')) : [];
         for (const c of allCards) {
             const code = extractCardCode(c);
             if (!code) continue;
@@ -617,7 +803,13 @@ const LtxCard = (() => {
             existingCodes.add(code);
         }
 
+        const aliasNames = actorParam
+            ? (insertMode === 'rep' ? getAliasActorsByQuery(actorParam) : [actorParam])
+            : (insertMode === 'rep' ? getAliasActorsByQuery(qParam) : []);
         const aliasSet = new Set(aliasNames);
+        const userEditedMap = typeof LtxIDB.getUserEditedMap === 'function' ? LtxIDB.getUserEditedMap() : {};
+        const qLower = qParam.toLowerCase();
+
         const tpl = allCards.find(c => !c.dataset.ltxAliasInjected) || allCards[0] || null;
         const matched = [];
         const queued = new Set();
@@ -625,13 +817,40 @@ const LtxCard = (() => {
         for (const item of LtxIDB.items.values()) {
             const code = LtxUtil.normalizeCode(item?.code);
             if (!code || existingCodes.has(code) || queued.has(code)) continue;
-            if (Array.isArray(item.actors) && item.actors.some(a => aliasSet.has(String(a).trim()))) {
+
+            let isMatch = false;
+            if (actorParam) {
+                isMatch = Array.isArray(item.actors) && item.actors.some(a => aliasSet.has(String(a).trim()));
+            } else if (qParam) {
+                if (insertMode === 'rep' && aliasNames.length > 1 && Array.isArray(item.actors) && item.actors.some(a => aliasSet.has(String(a).trim()))) {
+                    isMatch = true;
+                } else if (userEditedMap[code] || userEditedMap[String(item.code || '').trim()]) {
+                    if (code.toLowerCase().includes(qLower) || String(item.title || '').toLowerCase().includes(qLower)) {
+                        isMatch = true;
+                    } else if (Array.isArray(item.actors)) {
+                        isMatch = item.actors.some(a => {
+                            const clean = String(a || '').trim();
+                            if (!clean) return false;
+                            if (clean.toLowerCase().includes(qLower) || aliasSet.has(clean)) return true;
+                            const c = LtxActor.actorCache.get(clean);
+                            return Boolean(c && (
+                                (c.kName && c.kName.toLowerCase().includes(qLower)) ||
+                                (c.eName && c.eName.toLowerCase().includes(qLower)) ||
+                                (c.repName && c.repName.toLowerCase().includes(qLower))
+                            ));
+                        });
+                    }
+                }
+            }
+
+            if (isMatch) {
                 queued.add(code);
                 matched.push({ ...item, code });
             }
         }
 
         if (matched.length > 0) {
+            if (!gridEl) gridEl = createFallbackGridStage('ltxSearchStage');
             matched.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
             const inserted = [];
             const frag = document.createDocumentFragment();
@@ -642,6 +861,8 @@ const LtxCard = (() => {
                 frag.appendChild(el);
             }
             mountInsertedCards(gridEl, frag, inserted);
+        } else if (!gridEl) {
+            if (emptyStage) emptyStage.style.display = '';
         }
         syncBarStatsAndActions(notifyFn);
     }
@@ -655,7 +876,7 @@ const LtxCard = (() => {
         const gridEl = mainEl.querySelector('.grid');
         const allCards = gridEl ? Array.from(gridEl.querySelectorAll('article.card')) : [];
         const injectedCards = gridEl ? Array.from(gridEl.querySelectorAll('article.card[data-ltx-alias-injected="true"]')) : [];
-        const active = Boolean((location.hash === '#want' || (searchKeyword && LtxActor.getSearchInsertMode() === 'rep')) && injectedCards.length > 0);
+        const active = Boolean((location.hash === '#want' || searchKeyword) && injectedCards.length > 0);
 
         const allEl = mainEl.querySelector('div.status > button.seg.all > i');
         const okEl = mainEl.querySelector('div.status > button.seg.ok > i');
@@ -837,6 +1058,131 @@ const LtxCard = (() => {
         }
     }
 
+    function syncActorPanelUserActors() {
+        const panel = document.querySelector('#actor-panel');
+        if (!panel || typeof LtxIDB === 'undefined' || typeof LtxIDB.getUserEditedMap !== 'function') return;
+
+        const panelInput = panel.querySelector('div.head input');
+        if (panelInput && panelInput.dataset.ltxPanelSyncBound !== 'true') {
+            panelInput.dataset.ltxPanelSyncBound = 'true';
+            panelInput.addEventListener('input', () => requestAnimationFrame(syncActorPanelUserActors));
+        }
+
+        const userEditedMap = LtxIDB.getUserEditedMap();
+        const userActors = new Set();
+        for (const entry of Object.values(userEditedMap)) {
+            if (Array.isArray(entry?.actors)) {
+                for (const a of entry.actors) {
+                    const clean = String(a || '').trim();
+                    if (clean) userActors.add(clean);
+                }
+            }
+        }
+        if (userActors.size === 0) {
+            panel.querySelectorAll('[data-ltx-user-actor="true"]').forEach(el => el.remove());
+            return;
+        }
+
+        const actorWorkCounts = new Map();
+        for (const item of LtxIDB.items.values()) {
+            if (!Array.isArray(item?.actors)) continue;
+            for (const a of item.actors) {
+                const clean = String(a || '').trim();
+                if (userActors.has(clean)) actorWorkCounts.set(clean, (actorWorkCounts.get(clean) || 0) + 1);
+            }
+        }
+
+        panel.querySelectorAll('[data-ltx-user-actor="true"]').forEach(el => el.remove());
+
+        const nativeSpans = Array.from(panel.querySelectorAll('span.name[lang="ja"]'));
+        const existingJNames = new Set();
+        let templateRow = null;
+        let listContainer = null;
+
+        for (const sp of nativeSpans) {
+            const jName = (sp.dataset.ltxJname || sp.textContent || '').trim();
+            if (jName) existingJNames.add(jName);
+            if (!templateRow) {
+                const row = sp.closest('button, a, li') || sp.parentElement;
+                if (row && row.parentElement && !row.closest('.head')) {
+                    templateRow = row;
+                    listContainer = row.parentElement;
+                }
+            }
+        }
+
+        if (!listContainer) {
+            listContainer = panel.querySelector('.list, ul, .body, .actors') || panel.querySelector('div.head')?.nextElementSibling;
+        }
+        if (!listContainer) return;
+
+        const panelQuery = (panelInput?.value || '').trim();
+        const qL = panelQuery.toLowerCase();
+        const qC = qL.replace(/\s+/g, '');
+        const useCho = panelQuery ? LtxUtil.isChosungQuery(panelQuery) : false;
+
+        const toInject = [];
+        for (const jName of userActors) {
+            if (existingJNames.has(jName)) continue;
+            if (panelQuery) {
+                const cached = typeof LtxActor !== 'undefined' ? LtxActor.actorCache.get(jName) : null;
+                const score = Math.max(
+                    LtxUtil.matchStringOrChosung(jName, qL, qC, false),
+                    cached ? LtxUtil.matchStringOrChosung(cached.kName, qL, qC, useCho) : 0,
+                    cached ? LtxUtil.matchStringOrChosung(cached.eName, qL, qC, false) : 0,
+                    cached ? LtxUtil.matchStringOrChosung(cached.repName, qL, qC, useCho) : 0
+                );
+                if (score <= 0) continue;
+            }
+            toInject.push(jName);
+        }
+
+        if (toInject.length === 0) return;
+
+        const frag = document.createDocumentFragment();
+        for (const jName of toInject) {
+            const cnt = actorWorkCounts.get(jName) || 1;
+            let row;
+            if (templateRow) {
+                row = templateRow.cloneNode(true);
+                row.classList.remove('active', 'selected', 'on');
+                const nameSpan = row.querySelector('span.name[lang="ja"]');
+                if (nameSpan) {
+                    delete nameSpan.dataset.ltxJname;
+                    delete nameSpan.dataset.ltxBound;
+                    nameSpan.textContent = jName;
+                }
+                const cntEl = row.querySelector('b, small, i, .count, span:not(.name)');
+                if (cntEl && /\d+/.test(cntEl.textContent)) {
+                    cntEl.textContent = cntEl.textContent.replace(/\d+/, String(cnt));
+                }
+            } else {
+                row = document.createElement('button');
+                row.type = 'button';
+                row.className = 'actor-item';
+                copyScopeAttributes(panel, row);
+                row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;width:100%;padding:6px 10px;background:transparent;border:none;color:inherit;cursor:pointer;text-align:left;';
+                row.innerHTML = `<span class="name" lang="ja">${LtxUtil.escapeHtml(jName)}</span><small>${cnt}</small>`;
+            }
+            row.dataset.ltxUserActor = 'true';
+            row.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const url = new URL(location.href);
+                url.pathname = '/';
+                url.search = `?actor=${encodeURIComponent(jName)}`;
+                url.hash = '';
+                history.pushState(null, '', url.toString());
+                window.dispatchEvent(new PopStateEvent('popstate'));
+            });
+            if (typeof LtxActor !== 'undefined') {
+                row.querySelectorAll(LtxActor.ACTOR_SPAN_SELECTOR).forEach(LtxActor.bindActorSpan);
+            }
+            frag.appendChild(row);
+        }
+        listContainer.appendChild(frag);
+    }
+
     return {
         MAX_EXT_SITES,
         getExtSites: () => extSites,
@@ -847,12 +1193,14 @@ const LtxCard = (() => {
         resetExtSites,
         closeAllExtMenus,
         modifyCard,
+        refreshUserPatchedCards,
         getExtraWantSet,
         getMergedWantSet,
         mergeWantCodes,
         resetExtraWant,
         syncHeaderWantCounter,
         injectAliasActorCards,
+        syncActorPanelUserActors,
         syncBarStatsAndActions,
         syncSaveWantDialogItems
     };
