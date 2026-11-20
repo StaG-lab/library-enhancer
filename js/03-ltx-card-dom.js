@@ -170,6 +170,10 @@ const LtxCard = (() => {
                 const codeBtn = coverEl.querySelector('button.code');
                 if (codeBtn) coverEl.insertBefore(coverBtn, codeBtn);
                 else coverEl.appendChild(coverBtn);
+                if (imgEl.complete && imgEl.naturalWidth > 0) {
+                    imgEl.classList.add('in');
+                    coverEl.classList.remove('loading');
+                }
             }
         }
 
@@ -706,6 +710,12 @@ const LtxCard = (() => {
         const actorParam = (params.get('actor') || '').trim();
         const qParam = (params.get('q') || '').trim();
         const headerSearchInput = document.querySelector('#app > header > div.search-wrap > input, header .search-wrap input[type="search"]');
+        if (headerSearchInput && headerSearchInput.dataset.ltxSearchSyncBound !== 'true') {
+            headerSearchInput.dataset.ltxSearchSyncBound = 'true';
+            headerSearchInput.addEventListener('input', () => {
+                requestAnimationFrame(() => injectAliasActorCards(onOpenListPicker, notifyFn));
+            });
+        }
         const activeQ = (qParam || headerSearchInput?.value || '').trim();
         const searchKeyword = actorParam || activeQ;
         const insertMode = LtxActor.getSearchInsertMode();
