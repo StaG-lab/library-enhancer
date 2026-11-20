@@ -984,6 +984,164 @@ article.card:focus-within .ltx-ext-menu-wrap,
     margin-top: 8px;
 }
 
+/* IndexedDB 누락 데이터 직접 편집 패널 */
+.ltx-audit-item-wrap {
+    display: flex;
+    flex-direction: column;
+}
+
+.ltx-audit-edited-badge {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.14);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    vertical-align: middle;
+}
+
+.ltx-audit-edit-panel {
+    margin: -2px 0 8px;
+    padding: 12px 14px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--line, #2a2c34);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ltx-audit-popup-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ltx-audit-popup-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-right: 2px;
+}
+
+.ltx-audit-popup-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.ltx-audit-site-btn {
+    color: #38bdf8;
+    border-color: rgba(56, 189, 248, 0.35);
+    background: rgba(56, 189, 248, 0.08);
+}
+
+.ltx-audit-site-btn:hover {
+    background: rgba(56, 189, 248, 0.18);
+    border-color: #38bdf8;
+}
+
+.ltx-audit-edit-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ltx-audit-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ltx-audit-field-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #cbd5e1;
+}
+
+.ltx-audit-state {
+    font-style: normal;
+    font-size: 0.6875rem;
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
+.ltx-audit-state.filled {
+    color: #4cd498;
+    background: rgba(76, 212, 152, 0.14);
+}
+
+.ltx-audit-state.missing {
+    color: #fbbf24;
+    background: rgba(251, 191, 36, 0.14);
+}
+
+.ltx-audit-actor-ac-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ltx-audit-actor-ac-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px 0 2px;
+}
+
+.ltx-audit-actor-ac-item {
+    border: 1px solid rgba(76, 212, 152, 0.35);
+    background: rgba(76, 212, 152, 0.1);
+    color: #a7f3d0;
+    font-size: 0.72rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background-color 0.15s, border-color 0.15s;
+}
+
+.ltx-audit-actor-ac-item:hover {
+    background: rgba(76, 212, 152, 0.22);
+    border-color: #4cd498;
+}
+
+.ltx-audit-cover-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ltx-audit-cover-row .ltx-actor-input {
+    flex: 1;
+}
+
+.ltx-audit-cover-preview {
+    width: 48px;
+    height: 36px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid var(--line, #2a2c34);
+    flex: none;
+    background: #0f1014;
+}
+
+.ltx-audit-edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 6px;
+    padding-top: 4px;
+}
+
 @media (max-width: 720px) {
     .ltx-actor-row,
     .ltx-modal-add-bar {

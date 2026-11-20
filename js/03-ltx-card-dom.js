@@ -8,9 +8,7 @@ const LtxCard = (() => {
     const MAX_EXT_LABEL_LEN = 16;
 
     const DEFAULT_SITES = [
-        { id: 'preset_1', name: 'missAV', urlTemplate: 'https://missav123.com/en/search/{code}' },
-        { id: 'preset_2', name: 'JavLibrary', urlTemplate: 'https://www.javlibrary.com/en/vl_searchbyid.php?keyword={code}' },
-        { id: 'preset_3', name: 'SubtitleCat', urlTemplate: 'https://www.subtitlecat.com/index.php?search={code}' }
+        { id: 'preset_01', name: 'SubtitleCat', urlTemplate: 'https://www.subtitlecat.com/index.php?search={code}' }
     ];
 
     function loadExtSites() {

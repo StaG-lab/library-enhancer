@@ -302,6 +302,8 @@ const LtxIDB = (() => {
     const DB_NAME = 'ltx_enhancer_db';
     const DB_VERSION = 1;
     const STORE_NAME = 'items';
+    const USER_EDITED_KEY = 'ltx_user_edited_items_v1';
+    const EDITABLE_FIELDS = ['title', 'link', 'actors', 'cover'];
 
     const accumulatedItems = new Map();
     const pendingUpserts = new Map();
@@ -352,6 +354,14 @@ const LtxIDB = (() => {
                 };
                 req.onerror = () => reject(req.error);
             });
+            // 사용자 직접 입력 데이터 보정 (DB에 없거나 해당 필드가 비어있으면 복원 적용)
+            const userEdited = getUserEditedMap();
+            for (const [code, entry] of Object.entries(userEdited)) {
+                if (!entry || !code) continue;
+                const prev = accumulatedItems.get(code) || { code };
+                const merged = applyUserEditedFields(prev, entry);
+                accumulatedItems.set(code, merged);
+            }
             if (typeof onLoaded === 'function') onLoaded();
         } catch (err) {
             console.warn('[LTX-IDB] 로드 실패:', err);
@@ -399,12 +409,146 @@ const LtxIDB = (() => {
         });
     }
 
+    function getUserEditedMap() {
+        const raw = LtxUtil.store.get(USER_EDITED_KEY, {});
+        return (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+    }
+
+    function saveUserEditedMap(mapObj) {
+        LtxUtil.store.set(USER_EDITED_KEY, mapObj || {});
+    }
+
+    function applyUserEditedFields(targetItem, entry) {
+        const next = { ...targetItem, code: entry.code || targetItem.code };
+        const fields = Array.isArray(entry.editedFields) && entry.editedFields.length
+            ? entry.editedFields
+            : EDITABLE_FIELDS;
+        for (const f of fields) {
+            if (f === 'actors') {
+                if (Array.isArray(entry.actors) && entry.actors.length > 0) {
+                    next.actors = entry.actors.slice();
+                }
+            } else if (typeof entry[f] === 'string' && entry[f].trim()) {
+                next[f] = entry[f].trim();
+            }
+        }
+        return next;
+    }
+
+    function saveUserEditedItem(code, itemObj, editedFields = []) {
+        const normCode = String(code || '').trim();
+        if (!normCode || !itemObj) return null;
+        const map = getUserEditedMap();
+        const prev = map[normCode] || {};
+        const mergedFields = Array.from(new Set([
+            ...(Array.isArray(prev.editedFields) ? prev.editedFields : []),
+            ...(Array.isArray(editedFields) ? editedFields : [])
+        ])).filter(f => EDITABLE_FIELDS.includes(f));
+
+        const record = {
+            code: normCode,
+            editedFields: mergedFields.length ? mergedFields : EDITABLE_FIELDS.filter(f => {
+                if (f === 'actors') return Array.isArray(itemObj.actors) && itemObj.actors.length > 0;
+                return typeof itemObj[f] === 'string' && itemObj[f].trim() !== '';
+            }),
+            updatedAt: Date.now()
+        };
+        for (const f of record.editedFields) {
+            if (f === 'actors') {
+                record.actors = Array.isArray(itemObj.actors) ? itemObj.actors.filter(Boolean) : [];
+            } else {
+                record[f] = typeof itemObj[f] === 'string' ? itemObj[f].trim() : '';
+            }
+        }
+        map[normCode] = record;
+        saveUserEditedMap(map);
+        return record;
+    }
+
+    function removeUserEditedCodes(codesArray) {
+        if (!Array.isArray(codesArray) || codesArray.length === 0) return;
+        const map = getUserEditedMap();
+        let changed = false;
+        for (const c of codesArray) {
+            if (Object.prototype.hasOwnProperty.call(map, c)) {
+                delete map[c];
+                changed = true;
+            }
+        }
+        if (changed) saveUserEditedMap(map);
+    }
+
+    function exportUserEditedPayload() {
+        const map = getUserEditedMap();
+        const items = Object.values(map).filter(it => it && it.code);
+        return {
+            type: 'ltx-user-edited-items-v1',
+            exportedAt: new Date().toISOString(),
+            count: items.length,
+            items
+        };
+    }
+
+    async function importUserEditedItems(rawItems) {
+        if (!Array.isArray(rawItems)) return 0;
+        const map = getUserEditedMap();
+        let count = 0;
+        for (const raw of rawItems) {
+            if (!raw || typeof raw !== 'object' || !raw.code) continue;
+            const code = String(raw.code).trim();
+            if (!code) continue;
+
+            const fields = Array.isArray(raw.editedFields) && raw.editedFields.length
+                ? raw.editedFields.filter(f => EDITABLE_FIELDS.includes(f))
+                : EDITABLE_FIELDS.filter(f => {
+                    if (f === 'actors') return Array.isArray(raw.actors) && raw.actors.length > 0;
+                    return typeof raw[f] === 'string' && raw[f].trim() !== '';
+                });
+            if (fields.length === 0) continue;
+
+            const prevEntry = map[code] || {};
+            const mergedFields = Array.from(new Set([
+                ...(Array.isArray(prevEntry.editedFields) ? prevEntry.editedFields : []),
+                ...fields
+            ]));
+
+            const entry = {
+                ...prevEntry,
+                code,
+                editedFields: mergedFields,
+                updatedAt: raw.updatedAt || Date.now()
+            };
+            for (const f of fields) {
+                if (f === 'actors') {
+                    entry.actors = Array.isArray(raw.actors)
+                        ? raw.actors.map(a => String(a || '').trim()).filter(Boolean)
+                        : [];
+                } else if (typeof raw[f] === 'string') {
+                    entry[f] = raw[f].trim();
+                }
+            }
+            map[code] = entry;
+
+            const prevItem = accumulatedItems.get(code) || { code };
+            const mergedItem = applyUserEditedFields(prevItem, entry);
+            accumulatedItems.set(code, mergedItem);
+            queueUpsert(mergedItem);
+            count++;
+        }
+        if (count > 0) {
+            saveUserEditedMap(map);
+            await flushUpserts();
+        }
+        return count;
+    }
+
     async function deleteCodes(codesArray) {
         if (!Array.isArray(codesArray) || codesArray.length === 0) return;
         for (const c of codesArray) {
             accumulatedItems.delete(c);
             pendingUpserts.delete(c);
         }
+        removeUserEditedCodes(codesArray);
         const db = await openDB();
         return new Promise((resolve, reject) => {
             const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -425,6 +569,11 @@ const LtxIDB = (() => {
         queueUpsert,
         flushUpserts,
         clearAll,
-        deleteCodes
+        deleteCodes,
+        getUserEditedMap,
+        saveUserEditedItem,
+        removeUserEditedCodes,
+        exportUserEditedPayload,
+        importUserEditedItems
     };
 })();

@@ -478,9 +478,31 @@ const LtxModal = (() => {
         renderSites();
     }
 
+    const AUDIT_POPUP_SITES = [
+        { name: 'JavLibrary', buildUrl: (c) => `https://www.javlibrary.com/en/vl_searchbyid.php?keyword=${encodeURIComponent(c)}` },
+        { name: 'AVBASE', buildUrl: (c) => `https://www.avbase.net/works?q=${encodeURIComponent(c)}` },
+        { name: 'AVDBS', buildUrl: (c) => `https://www.avdbs.com/menu/search.php?kwd=${encodeURIComponent(c)}&seq=118479501&tab=2` },
+        { name: 'ShiroutoWiki', buildUrl: (c) => `https://shiroutowiki.work/?s=${encodeURIComponent(c)}` },
+        { name: 'AV-Actress', buildUrl: (c) => `https://av-actress-star.com/list.php?q=${encodeURIComponent(c)}` },
+        { name: 'HDBlog', buildUrl: (c) => `https://hdblog.me/?s=${encodeURIComponent(c)}` }
+    ];
+
+    function openAuditSearchPopup(url, e) {
+        if (e && (e.ctrlKey || e.metaKey || e.shiftKey)) {
+            window.open(url, '_blank', 'noopener,noreferrer');
+            return;
+        }
+        const w = 1040, h = 780;
+        const left = Math.max(0, Math.round((window.screen.width - w) / 2));
+        const top = Math.max(0, Math.round((window.screen.height - h) / 2));
+        const pop = window.open(url, 'ltx_audit_lookup_popup', `popup=yes,width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`);
+        if (pop) pop.focus();
+        else window.open(url, '_blank', 'noopener,noreferrer');
+    }
+
     // 3. IndexedDB 작품 데이터 누락 점검 및 정리 모달
     function openIdbAuditModal() {
-        let filterType = 'all_missing', query = '';
+        let filterType = 'all_missing', query = '', editingCode = null;
         const selectedCodes = new Set();
 
         const { modal } = LtxUI.createModal({
@@ -493,9 +515,12 @@ const LtxModal = (() => {
                     <button type="button" class="ltx-modal-tab" data-filter="no_link">link 누락</button>
                     <button type="button" class="ltx-modal-tab" data-filter="no_actors">actors 누락</button>
                     <button type="button" class="ltx-modal-tab" data-filter="no_cover">cover 누락</button>
+                    <button type="button" class="ltx-modal-tab" data-filter="user_edited">직접 편집</button>
                 </div>
                 <div class="ltx-modal-toolbar">
                     <input type="text" class="ltx-modal-search" id="idb-audit-search" placeholder="품번(code) 또는 제목 검색…" />
+                    <button type="button" class="ltx-modal-action-btn" id="idb-user-backup" title="사용자가 직접 입력·수정한 데이터만 JSON으로 백업">직접 입력 백업 (<span id="idb-user-cnt">0</span>)</button>
+                    <button type="button" class="ltx-modal-action-btn" id="idb-user-restore" title="백업한 직접 입력 데이터(JSON) 복원">직접 입력 복원</button>
                     <button type="button" class="ltx-modal-action-btn warning" id="idb-del-sel">선택 삭제 (<span id="idb-sel-cnt">0</span>)</button>
                     <button type="button" class="ltx-modal-action-btn danger" id="idb-del-all" style="color:#f87171;">현재 필터 전체 삭제</button>
                 </div>
@@ -505,28 +530,235 @@ const LtxModal = (() => {
 
         const bodyEl = modal.querySelector('#idb-audit-body');
         const selCntEl = modal.querySelector('#idb-sel-cnt');
+        const userCntEl = modal.querySelector('#idb-user-cnt');
         let currentFiltered = [];
 
+        function buildEditPanel(item, ml, ma, mc) {
+            const mt = !item.title || !String(item.title).trim();
+            const actorsStr = Array.isArray(item.actors) ? item.actors.join(', ') : '';
+            const panel = document.createElement('div');
+            panel.className = 'ltx-audit-edit-panel';
+
+            const popupBtnsHtml = AUDIT_POPUP_SITES.map((s, idx) =>
+                `<button type="button" class="ltx-mini-btn ltx-audit-site-btn" data-site-idx="${idx}" title="${LtxUtil.escapeHtml(s.buildUrl(item.code))} (클릭: 팝업 / Ctrl·휠클릭: 새 탭)">${LtxUtil.escapeHtml(s.name)}</button>`
+            ).join('');
+
+            panel.innerHTML = `
+                <div class="ltx-audit-popup-bar">
+                    <span class="ltx-audit-popup-label">외부 검색 (팝업):</span>
+                    <div class="ltx-audit-popup-btns">${popupBtnsHtml}</div>
+                </div>
+                <div class="ltx-audit-edit-grid">
+                    <label class="ltx-audit-field">
+                        <span class="ltx-audit-field-head">제목 (title) <em class="ltx-audit-state ${mt ? 'missing' : 'filled'}">${mt ? '누락' : '자동완성'}</em></span>
+                        <input type="text" class="ltx-actor-input edit-title" value="${LtxUtil.escapeHtml(item.title || '')}" placeholder="작품 제목 입력…" />
+                    </label>
+                    <label class="ltx-audit-field">
+                        <span class="ltx-audit-field-head">링크 (link) <em class="ltx-audit-state ${ml ? 'missing' : 'filled'}">${ml ? '누락' : '자동완성'}</em></span>
+                        <input type="text" class="ltx-actor-input edit-link" value="${LtxUtil.escapeHtml(item.link || '')}" placeholder="마그넷 / 다운로드 링크 입력…" />
+                    </label>
+                    <div class="ltx-audit-field">
+                        <span class="ltx-audit-field-head">배우 (actors, 쉼표 구분) <em class="ltx-audit-state ${ma ? 'missing' : 'filled'}">${ma ? '누락' : '자동완성'}</em></span>
+                        <input type="text" class="ltx-actor-input edit-actors" value="${LtxUtil.escapeHtml(actorsStr)}" placeholder="예: 波多野結衣, 大槻ひびき" />
+                        <div class="ltx-audit-actor-ac-wrap">
+                            <input type="text" class="ltx-actor-input edit-actor-ac" placeholder="저장된 배우 캐시에서 자동완성 추가 (한글/초성/영문/일본어)…" />
+                            <div class="ltx-audit-actor-ac-list" style="display:none;"></div>
+                        </div>
+                    </div>
+                    <div class="ltx-audit-field">
+                        <span class="ltx-audit-field-head">표지 (cover) <em class="ltx-audit-state ${mc ? 'missing' : 'filled'}">${mc ? '누락' : '자동완성'}</em></span>
+                        <div class="ltx-audit-cover-row">
+                            <input type="text" class="ltx-actor-input edit-cover" value="${LtxUtil.escapeHtml(item.cover || '')}" placeholder="표지 이미지 URL 입력…" />
+                            <img class="ltx-audit-cover-preview" referrerpolicy="no-referrer" alt="" style="display:none;" />
+                        </div>
+                    </div>
+                </div>
+                <div class="ltx-audit-edit-actions">
+                    <button type="button" class="ltx-modal-action-btn primary ltx-audit-save-btn">저장</button>
+                    <button type="button" class="ltx-mini-btn ltx-audit-cancel-btn">취소</button>
+                </div>
+            `;
+
+            // 외부 사이트 팝업 버튼 바인딩
+            panel.querySelectorAll('.ltx-audit-site-btn').forEach(btn => {
+                const site = AUDIT_POPUP_SITES[Number(btn.dataset.siteIdx)];
+                if (!site) return;
+                const targetUrl = site.buildUrl(item.code);
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openAuditSearchPopup(targetUrl, e);
+                });
+                btn.addEventListener('mousedown', (e) => {
+                    if (e.button === 1) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        window.open(targetUrl, '_blank', 'noopener,noreferrer');
+                    }
+                });
+                btn.addEventListener('auxclick', (e) => {
+                    if (e.button === 1) { e.preventDefault(); e.stopPropagation(); }
+                });
+            });
+
+            // 표지 미리보기
+            const coverInput = panel.querySelector('.edit-cover');
+            const coverPreview = panel.querySelector('.ltx-audit-cover-preview');
+            const syncCoverPreview = () => {
+                const url = coverInput.value.trim();
+                if (url && /^https?:\/\//i.test(url)) {
+                    coverPreview.src = url;
+                    coverPreview.style.display = 'block';
+                } else {
+                    coverPreview.removeAttribute('src');
+                    coverPreview.style.display = 'none';
+                }
+            };
+            coverPreview.addEventListener('error', () => { coverPreview.style.display = 'none'; });
+            coverInput.addEventListener('input', syncCoverPreview);
+            syncCoverPreview();
+
+            // 배우 캐시 자동완성
+            const actorsInput = panel.querySelector('.edit-actors');
+            const acInput = panel.querySelector('.edit-actor-ac');
+            const acList = panel.querySelector('.ltx-audit-actor-ac-list');
+            acInput.addEventListener('input', () => {
+                const raw = acInput.value.trim();
+                if (!raw || typeof LtxActor === 'undefined' || !LtxActor.actorCache?.size) {
+                    acList.style.display = 'none';
+                    acList.innerHTML = '';
+                    return;
+                }
+                const qL = raw.toLowerCase(), qC = qL.replace(/\s+/g, ''), useCho = LtxUtil.isChosungQuery(raw);
+                const hits = [];
+                for (const it of LtxActor.actorCache.values()) {
+                    const score = Math.max(
+                        LtxUtil.matchStringOrChosung(it.kName, qL, qC, useCho),
+                        LtxUtil.matchStringOrChosung(it.eName, qL, qC, false),
+                        LtxUtil.matchStringOrChosung(it.jName, qL, qC, false),
+                        LtxUtil.matchStringOrChosung(it.repName, qL, qC, useCho)
+                    );
+                    if (score > 0) hits.push({ it, score });
+                }
+                hits.sort((a, b) => b.score - a.score);
+                const top = hits.slice(0, 8);
+                if (!top.length) {
+                    acList.style.display = 'none';
+                    acList.innerHTML = '';
+                    return;
+                }
+                acList.innerHTML = '';
+                for (const { it } of top) {
+                    const pill = document.createElement('button');
+                    pill.type = 'button';
+                    pill.className = 'ltx-audit-actor-ac-item';
+                    pill.textContent = it.kName && it.kName !== it.jName ? `${it.kName} (${it.jName})` : it.jName;
+                    pill.addEventListener('click', () => {
+                        const existing = actorsInput.value.split(',').map(s => s.trim()).filter(Boolean);
+                        if (!existing.includes(it.jName)) existing.push(it.jName);
+                        actorsInput.value = existing.join(', ');
+                        acInput.value = '';
+                        acList.style.display = 'none';
+                        acList.innerHTML = '';
+                        actorsInput.focus();
+                    });
+                    acList.appendChild(pill);
+                }
+                acList.style.display = 'flex';
+            });
+
+            // 저장 / 취소
+            panel.querySelector('.ltx-audit-cancel-btn').addEventListener('click', () => {
+                editingCode = null;
+                renderAudit();
+            });
+
+            panel.querySelector('.ltx-audit-save-btn').addEventListener('click', async () => {
+                const nextTitle = panel.querySelector('.edit-title').value.trim();
+                const nextLink = panel.querySelector('.edit-link').value.trim();
+                const nextActors = Array.from(new Set(
+                    actorsInput.value.split(',').map(s => s.trim()).filter(Boolean)
+                ));
+                const nextCover = coverInput.value.trim();
+
+                const prevTitle = String(item.title || '').trim();
+                const prevLink = String(item.link || '').trim();
+                const prevActors = Array.isArray(item.actors) ? item.actors.map(s => String(s || '').trim()).filter(Boolean) : [];
+                const prevCover = String(item.cover || '').trim();
+
+                const editedFields = [];
+                if (nextTitle !== prevTitle) editedFields.push('title');
+                if (nextLink !== prevLink) editedFields.push('link');
+                if (nextActors.join('\0') !== prevActors.join('\0')) editedFields.push('actors');
+                if (nextCover !== prevCover) editedFields.push('cover');
+
+                const updatedItem = {
+                    ...item,
+                    code: item.code,
+                    title: nextTitle,
+                    link: nextLink,
+                    actors: nextActors,
+                    cover: nextCover
+                };
+
+                LtxIDB.items.set(item.code, updatedItem);
+                LtxIDB.queueUpsert(updatedItem);
+                await LtxIDB.flushUpserts();
+
+                if (editedFields.length > 0 || LtxIDB.getUserEditedMap()[item.code]) {
+                    LtxIDB.saveUserEditedItem(item.code, updatedItem, editedFields);
+                }
+
+                if (typeof LtxActor !== 'undefined') {
+                    for (const actor of nextActors) {
+                        if (actor && !LtxActor.actorCache.has(actor) && !LtxActor.noDataCache.has(actor) && !LtxActor.ignoredCache.has(actor)) {
+                            LtxActor.enqueueLookup(actor, false);
+                        }
+                    }
+                }
+
+                if (deps.updateMainBtnFn) deps.updateMainBtnFn();
+                if (deps.notifyFn) deps.notifyFn(`${item.code} 저장 완료`);
+                editingCode = null;
+                renderAudit();
+            });
+
+            return panel;
+        }
+
         function renderAudit() {
-            const stats = { no_link: [], no_actors: [], no_cover: [], all_missing: [] };
+            const userEditedMap = LtxIDB.getUserEditedMap();
+            const userEditedCount = Object.keys(userEditedMap).length;
+            const stats = { no_link: [], no_actors: [], no_cover: [], all_missing: [], user_edited: [] };
+
             for (const item of LtxIDB.items.values()) {
                 if (!item?.code) continue;
                 const ml = !item.link || !String(item.link).trim();
                 const ma = !Array.isArray(item.actors) || item.actors.length === 0;
                 const mc = !item.cover || !String(item.cover).trim();
+                const isUserEdited = Boolean(userEditedMap[item.code]);
                 if (ml) stats.no_link.push(item);
                 if (ma) stats.no_actors.push(item);
                 if (mc) stats.no_cover.push(item);
-                if (ml || ma || mc) stats.all_missing.push({ item, ml, ma, mc });
+                if (ml || ma || mc) stats.all_missing.push({ item, ml, ma, mc, isUserEdited });
+                if (isUserEdited) stats.user_edited.push({ item, ml, ma, mc, isUserEdited });
             }
 
             modal.querySelector('#idb-total-badge').textContent = `(총 ${LtxIDB.items.size}편)`;
+            userCntEl.textContent = String(userEditedCount);
+            const tabLabels = {
+                all_missing: '전체 누락',
+                no_link: 'link 누락',
+                no_actors: 'actors 누락',
+                no_cover: 'cover 누락',
+                user_edited: '직접 편집'
+            };
             modal.querySelectorAll('.ltx-modal-tab').forEach(t => {
                 const f = t.dataset.filter;
-                t.textContent = `${f === 'all_missing' ? '전체 누락' : f === 'no_link' ? 'link 누락' : f === 'no_actors' ? 'actors 누락' : 'cover 누락'} (${stats[f].length})`;
+                t.textContent = `${tabLabels[f] || f} (${stats[f].length})`;
             });
 
-            let pool = stats.all_missing;
+            let pool = filterType === 'user_edited' ? stats.user_edited : stats.all_missing;
             if (filterType === 'no_link') pool = pool.filter(x => x.ml);
             if (filterType === 'no_actors') pool = pool.filter(x => x.ma);
             if (filterType === 'no_cover') pool = pool.filter(x => x.mc);
@@ -536,28 +768,48 @@ const LtxModal = (() => {
             }
             currentFiltered = pool;
             selCntEl.textContent = String(selectedCodes.size);
-            bodyEl.innerHTML = pool.length ? '' : `<div class="ltx-modal-empty">누락된 작품 데이터가 없습니다.</div>`;
+            bodyEl.innerHTML = pool.length ? '' : `<div class="ltx-modal-empty">${filterType === 'user_edited' ? '직접 편집한 작품 데이터가 없습니다.' : '누락된 작품 데이터가 없습니다.'}</div>`;
 
             const frag = document.createDocumentFragment();
-            for (const { item, ml, ma, mc } of pool.slice(0, 100)) {
+            for (const { item, ml, ma, mc, isUserEdited } of pool.slice(0, 100)) {
                 const tags = [ml && 'link 없음', ma && 'actors 없음', mc && 'cover 없음'].filter(Boolean);
+                const wrap = document.createElement('div');
+                wrap.className = 'ltx-audit-item-wrap';
+
                 const row = document.createElement('div');
                 row.className = 'ltx-ext-site-row';
                 row.innerHTML = `
                     <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
                         <input type="checkbox" class="ltx-row-select-chk" ${selectedCodes.has(item.code) ? 'checked' : ''} />
-                        <div class="ltx-ext-site-info"><div class="ltx-ext-site-title">${LtxUtil.escapeHtml(item.code)} <span style="color:#fbbf24;font-size:0.75rem;">[${tags.join(' · ')}]</span></div><div class="ltx-ext-site-url">${LtxUtil.escapeHtml(item.title || '(제목 없음)')}</div></div>
+                        <div class="ltx-ext-site-info">
+                            <div class="ltx-ext-site-title">${LtxUtil.escapeHtml(item.code)} ${tags.length ? `<span style="color:#fbbf24;font-size:0.75rem;">[${tags.join(' · ')}]</span>` : `<span style="color:#4cd498;font-size:0.75rem;">[누락 없음]</span>`} ${isUserEdited ? `<span class="ltx-audit-edited-badge">직접 편집</span>` : ''}</div>
+                            <div class="ltx-ext-site-url">${LtxUtil.escapeHtml(item.title || '(제목 없음)')}</div>
+                        </div>
                     </div>
-                    <button type="button" class="ltx-mini-btn danger">DB 삭제</button>
+                    <div style="display:flex;align-items:center;gap:6px;flex:none;">
+                        <button type="button" class="ltx-mini-btn edit">${editingCode === item.code ? '닫기' : '편집'}</button>
+                        <button type="button" class="ltx-mini-btn danger">DB 삭제</button>
+                    </div>
                 `;
                 row.querySelector('.ltx-row-select-chk').addEventListener('change', (e) => { e.target.checked ? selectedCodes.add(item.code) : selectedCodes.delete(item.code); selCntEl.textContent = String(selectedCodes.size); });
+                row.querySelector('.edit').addEventListener('click', () => {
+                    editingCode = (editingCode === item.code) ? null : item.code;
+                    renderAudit();
+                });
                 row.querySelector('.danger').addEventListener('click', async () => {
                     await LtxIDB.deleteCodes([item.code]);
                     selectedCodes.delete(item.code);
+                    if (editingCode === item.code) editingCode = null;
                     if (deps.updateMainBtnFn) deps.updateMainBtnFn();
                     renderAudit();
                 });
-                frag.appendChild(row);
+                wrap.appendChild(row);
+
+                if (editingCode === item.code) {
+                    wrap.appendChild(buildEditPanel(item, ml, ma, mc));
+                }
+
+                frag.appendChild(wrap);
             }
             bodyEl.appendChild(frag);
         }
@@ -565,10 +817,37 @@ const LtxModal = (() => {
         modal.querySelectorAll('.ltx-modal-tab').forEach(t => t.addEventListener('click', () => {
             filterType = t.dataset.filter;
             selectedCodes.clear();
+            editingCode = null;
             modal.querySelectorAll('.ltx-modal-tab').forEach(b => b.classList.toggle('active', b === t));
             renderAudit();
         }));
         modal.querySelector('#idb-audit-search').addEventListener('input', (e) => { query = e.target.value.trim(); renderAudit(); });
+        modal.querySelector('#idb-user-backup').addEventListener('click', () => {
+            const payload = LtxIDB.exportUserEditedPayload();
+            if (!payload.count) { alert('백업할 직접 입력 데이터가 없습니다.'); return; }
+            const dateStr = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+            LtxUtil.downloadJson(payload, `ltx-user-edited-backup-${dateStr}.json`);
+            if (deps.notifyFn) deps.notifyFn(`직접 입력 데이터 ${payload.count}건 백업 완료`);
+        });
+        modal.querySelector('#idb-user-restore').addEventListener('click', () => {
+            LtxUtil.selectLocalFiles('.json,application/json', async (files) => {
+                try {
+                    const combined = [];
+                    for (const file of files) {
+                        const parsed = JSON.parse(await file.text());
+                        if (Array.isArray(parsed)) combined.push(...parsed);
+                        else if (parsed && Array.isArray(parsed.items)) combined.push(...parsed.items);
+                    }
+                    if (!combined.length) { alert('복원할 직접 입력 데이터가 파일에 없습니다.'); return; }
+                    const restoredCount = await LtxIDB.importUserEditedItems(combined);
+                    if (deps.updateMainBtnFn) deps.updateMainBtnFn();
+                    if (deps.notifyFn) deps.notifyFn(`직접 입력 데이터 ${restoredCount}건 복원 완료`);
+                    renderAudit();
+                } catch (err) {
+                    alert(`백업 파일 복원 오류: ${err.message}`);
+                }
+            });
+        });
         modal.querySelector('#idb-del-sel').addEventListener('click', async () => {
             if (!selectedCodes.size || !confirm(`선택한 ${selectedCodes.size}건을 삭제하시겠습니까?`)) return;
             await LtxIDB.deleteCodes(Array.from(selectedCodes));

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LTX Library Enhancer For Korean Users
 // @namespace    http://tampermonkey.net/
-// @version      1.1.3
+// @version      1.1.4
 // @description  배우 한글/영문/초성 검색, 다중 명의(대표 이름) 통합 검색, JSON/CSV 내보내기, 외부 검색 사이트(extLink) 기능
 // @author       You
 // @match        https://ltxlib.dpdns.org/*
@@ -13,11 +13,11 @@
 // @grant        unsafeWindow
 // @updateURL    https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/LTX-Library-Enhancer-For-Korean.user.js
 // @downloadURL  https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/LTX-Library-Enhancer-For-Korean.user.js
-// @require      https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/js/01-ltx-utils-storage.js?v=1.1.3
-// @require      https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/js/02-ltx-actor-avdbs.js?v=1.1.3
-// @require      https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/js/03-ltx-card-dom.js?v=1.1.3
-// @require      https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/js/04-ltx-modals.js?v=1.1.3
-// @resource     LTX_CSS https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/css/ltx-enhancer.css?v=1.1.3
+// @require      https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/js/01-ltx-utils-storage.js?v=1.1.4
+// @require      https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/js/02-ltx-actor-avdbs.js?v=1.1.4
+// @require      https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/js/03-ltx-card-dom.js?v=1.1.4
+// @require      https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/js/04-ltx-modals.js?v=1.1.4
+// @resource     LTX_CSS https://raw.githubusercontent.com/StaG-lab/library-enhancer/refs/heads/main/css/ltx-enhancer.css?v=1.1.4
 // @run-at       document-start
 // ==/UserScript==
 /* global DecompressionStream, LtxUtil, LtxUI, LtxActor, LtxCard, LtxIDB */
@@ -251,10 +251,12 @@
         if (scrollWorker) { scrollWorker.postMessage('stop'); scrollWorker.terminate(); scrollWorker = null; }
         if (scrollFallback) { clearInterval(scrollFallback); scrollFallback = null; }
         updateMainButtonCounter(msg);
+        /*
         if (completed) {
             exportCurrentJson();
             setTimeout(exportCurrentCsv, 350);
         }
+        */
         if (msg) setTimeout(() => { if (!isAutoScrolling) updateMainButtonCounter(); }, 2200);
     }
 
@@ -276,11 +278,11 @@
         const m = document.querySelector('.bar-end .result')?.textContent?.match(/(\d+)/);
         if (m) target = Math.max(target, parseInt(m[1], 10));
 
-        if (target > 0 && (curC >= target || curA >= target) && !isBusy) { stopAutoScroll('완료! 파일 저장', true); return; }
+        if (target > 0 && (curC >= target || curA >= target) && !isBusy) { stopAutoScroll('스크롤 완료!', true); return; }
         if (curH > lastH || curC > lastCards || curA > lastAcc || isBusy) {
             lastH = curH; lastCards = curC; lastAcc = curA; idleTicks = 0;
         } else if (++idleTicks >= (target > 0 && curA < target ? 45 : 20)) {
-            stopAutoScroll('완료! 파일 저장', true);
+            stopAutoScroll('스크롤 완료!', true);
         }
     }
 
@@ -361,7 +363,7 @@
 
         addMenuItem('JSON 다운로드', () => { exportCurrentJson(); flashStatus('JSON 완료', 1200); });
         addMenuItem('CSV 다운로드', () => { exportCurrentCsv(); flashStatus('CSV 완료', 1200); });
-        addMenuItem('자동 스크롤 (완료 시 자동 저장)', () => {
+        addMenuItem('자동 스크롤', () => {
             if (isAutoScrolling) { toggleAutoScroll(); return; }
             if (location.hostname === 'ltxlib.dpdns.org' && location.pathname === '/' && !location.search) { toggleAutoScroll(); return; }
             sessionStorage.setItem(PENDING_AUTOSCROLL_KEY, '1');
@@ -372,9 +374,9 @@
         addMenuItem('CSV 파일 병합', handleMergeCsvFiles);
         addDivider();
         addMenuItem(`외부 사이트 관리 (${LtxCard.getExtSites().length}/${LtxCard.MAX_EXT_SITES})`, LtxModal.openExtSitesManagerModal, 'ltx-ext-sites-count');
-        addMenuItem('IndexedDB 누락 데이터 점검/정리', LtxModal.openIdbAuditModal);
+        addMenuItem('누락 데이터 정리', LtxModal.openIdbAuditModal);
         addDivider();
-        addMenuItem(`배우 캐시 / 스킵 관리 (${LtxActor.actorCache.size} / ${LtxActor.noDataCache.size})`, () => LtxModal.openActorManagerModal('cached'), 'ltx-actor-manage-label');
+        addMenuItem(`배우 정보 관리 (${LtxActor.actorCache.size} / ${LtxActor.noDataCache.size})`, () => LtxModal.openActorManagerModal('cached'), 'ltx-actor-manage-label');
         addMenuItem(`미조회 배우 일괄 조회 (스킵 ${LtxActor.noDataCache.size}명)`, () => LtxActor.batchLookupUnfetched(flashStatus), 'ltx-actor-batch-label');
         addMenuItem(`캐시·설정 백업 (${LtxActor.actorCache.size}명 / ${LtxCard.getExtSites().length}개)`, () => LtxActor.openSelectiveBackupModal(flashStatus), 'ltx-actor-cache-count');
         addMenuItem('캐시·설정 복원 (JSON)', () => LtxActor.openSelectiveRestoreModal(flashStatus));
