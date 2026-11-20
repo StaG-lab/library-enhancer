@@ -484,7 +484,8 @@ const LtxModal = (() => {
         { name: 'AVDBS', buildUrl: (c) => `https://www.avdbs.com/menu/search.php?kwd=${encodeURIComponent(c)}&seq=118479501&tab=2` },
         { name: 'ShiroutoWiki', buildUrl: (c) => `https://shiroutowiki.work/?s=${encodeURIComponent(c)}` },
         { name: 'AV-Actress', buildUrl: (c) => `https://av-actress-star.com/list.php?q=${encodeURIComponent(c)}` },
-        { name: 'HDBlog', buildUrl: (c) => `https://hdblog.me/?s=${encodeURIComponent(c)}` }
+        { name: 'HDBlog', buildUrl: (c) => `https://hdblog.me/?s=${encodeURIComponent(c)}` },
+        { name: 'Konodare', buildUrl: (c) => `https://konodare.wew.jp/?s=${encodeURIComponent(c)}` }
     ];
 
     function openAuditSearchPopup(url, e) {

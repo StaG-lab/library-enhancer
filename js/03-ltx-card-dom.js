@@ -1007,9 +1007,9 @@ const LtxCard = (() => {
                 frag.appendChild(el);
             }
             mountInsertedCards(gridEl, frag, inserted);
-        } else {
+        } else if (!gridEl || existingCodes.size === 0) {
             mainEl.querySelectorAll('.grid-stage[data-ltx-search-stage="true"]').forEach(el => el.remove());
-            if (emptyStage) emptyStage.style.display = '';
+            if (emptyStage && emptyStage.style.display !== '') emptyStage.style.display = '';
         }
         syncBarStatsAndActions(notifyFn);
     }
