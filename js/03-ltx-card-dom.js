@@ -131,10 +131,16 @@ const LtxCard = (() => {
 
         // 1) cover 누락 보완
         if (typeof entry.cover === 'string' && entry.cover.trim()) {
+            const targetCover = entry.cover.trim();
             const coverEl = card.querySelector('.cover');
             const existingImg = coverEl?.querySelector('.cover-btn img');
-            const hasValidImg = existingImg && existingImg.getAttribute('src');
-            if (coverEl && (!hasValidImg || existingImg.closest('[data-ltx-user-patched="cover"]'))) {
+            const isPatchedCover = Boolean(existingImg?.closest('[data-ltx-user-patched="cover"]'));
+            const needsPatch = coverEl
+                && coverEl.dataset.ltxCoverFailed !== targetCover
+                && (!existingImg || !existingImg.getAttribute('src') || (isPatchedCover && existingImg.getAttribute('src') !== targetCover));
+
+            if (needsPatch) {
+                delete coverEl.dataset.ltxCoverFailed;
                 coverEl.querySelector('.empty')?.remove();
                 coverEl.querySelector('.cover-btn[data-ltx-user-patched="cover"]')?.remove();
 
@@ -147,13 +153,17 @@ const LtxCard = (() => {
                 const imgEl = document.createElement('img');
                 imgEl.loading = 'lazy';
                 imgEl.decoding = 'async';
-                imgEl.src = entry.cover.trim();
+                imgEl.src = targetCover;
                 imgEl.alt = '';
                 imgEl.setAttribute('referrerpolicy', 'no-referrer');
                 copyScopeAttributes(coverEl, imgEl);
 
                 imgEl.addEventListener('load', () => { imgEl.classList.add('in'); coverEl.classList.remove('loading'); });
-                imgEl.addEventListener('error', () => { coverEl.classList.remove('loading'); coverBtn.remove(); });
+                imgEl.addEventListener('error', () => {
+                    coverEl.classList.remove('loading');
+                    coverEl.dataset.ltxCoverFailed = targetCover;
+                    coverBtn.remove();
+                });
 
                 coverEl.classList.add('loading');
                 coverBtn.appendChild(imgEl);
@@ -168,12 +178,12 @@ const LtxCard = (() => {
 
         // 2) title 누락 보완
         if (typeof entry.title === 'string' && entry.title.trim()) {
+            const nextTitle = entry.title.trim();
             const titleH3 = bodyEl.querySelector('h3.title');
             const titleBtn = titleH3?.querySelector('button.title-btn');
             const currentTitle = (titleBtn ? titleBtn.textContent : titleH3?.textContent || '').trim();
             const isMissingTitle = !currentTitle || LtxUtil.normalizeCode(currentTitle) === normCode || currentTitle === '(제목 없음)';
-            if (titleH3 && (isMissingTitle || titleH3.dataset.ltxUserPatched === 'title')) {
-                const nextTitle = entry.title.trim();
+            if (titleH3 && currentTitle !== nextTitle && (isMissingTitle || titleH3.dataset.ltxUserPatched === 'title')) {
                 titleH3.setAttribute('title', nextTitle);
                 titleH3.dataset.ltxUserPatched = 'title';
                 if (titleBtn) titleBtn.textContent = nextTitle;
@@ -183,26 +193,29 @@ const LtxCard = (() => {
 
         // 3) actors 누락 보완
         if (Array.isArray(entry.actors) && entry.actors.length > 0) {
+            const cleanActors = entry.actors.map(a => String(a || '').trim()).filter(Boolean);
+            const targetActorsSig = cleanActors.join('\0');
             let whoEl = bodyEl.querySelector('.who');
-            if (!whoEl) {
-                whoEl = document.createElement('div');
-                whoEl.className = 'who';
-                copyScopeAttributes(bodyEl, whoEl);
-                const titleEl = bodyEl.querySelector('h3.title');
-                if (titleEl) titleEl.insertAdjacentElement('afterend', whoEl);
-                else bodyEl.prepend(whoEl);
-            }
-            const existingNativeTags = whoEl.querySelectorAll('.tags:not([data-ltx-user-patched="actors"]) .tag');
-            if (existingNativeTags.length === 0) {
-                whoEl.querySelector('.tags[data-ltx-user-patched="actors"]')?.remove();
+            const existingNativeTags = whoEl ? whoEl.querySelectorAll('.tags:not([data-ltx-user-patched="actors"]) .tag') : [];
+            const existingPatchedTags = whoEl?.querySelector('.tags[data-ltx-user-patched="actors"]');
+
+            if (cleanActors.length > 0 && existingNativeTags.length === 0 && existingPatchedTags?.dataset.ltxPatchedSig !== targetActorsSig) {
+                if (!whoEl) {
+                    whoEl = document.createElement('div');
+                    whoEl.className = 'who';
+                    copyScopeAttributes(bodyEl, whoEl);
+                    const titleEl = bodyEl.querySelector('h3.title');
+                    if (titleEl) titleEl.insertAdjacentElement('afterend', whoEl);
+                    else bodyEl.prepend(whoEl);
+                }
+                existingPatchedTags?.remove();
                 const tagsDiv = document.createElement('div');
                 tagsDiv.className = 'tags';
                 tagsDiv.dataset.ltxUserPatched = 'actors';
+                tagsDiv.dataset.ltxPatchedSig = targetActorsSig;
                 copyScopeAttributes(whoEl, tagsDiv);
 
-                for (const actor of entry.actors) {
-                    const cleanActor = String(actor || '').trim();
-                    if (!cleanActor) continue;
+                for (const cleanActor of cleanActors) {
                     const tagSpan = document.createElement('span');
                     tagSpan.className = 'tag';
                     copyScopeAttributes(whoEl, tagSpan);
@@ -242,9 +255,11 @@ const LtxCard = (() => {
 
         // 4) link 누락 보완
         if (typeof entry.link === 'string' && entry.link.trim()) {
-            const existingCopy = bodyEl.querySelector('.copy-btn:not([data-ltx-user-patched="link"])');
-            if (!existingCopy) {
-                bodyEl.querySelector('.copy-btn[data-ltx-user-patched="link"]')?.remove();
+            const linkStr = entry.link.trim();
+            const existingNativeCopy = bodyEl.querySelector('.copy-btn:not([data-ltx-user-patched="link"])');
+            const existingPatchedCopy = bodyEl.querySelector('.copy-btn[data-ltx-user-patched="link"]');
+            if (!existingNativeCopy && existingPatchedCopy?.getAttribute('title') !== linkStr) {
+                existingPatchedCopy?.remove();
                 let actionsEl = bodyEl.querySelector('.actions');
                 if (!actionsEl) {
                     actionsEl = document.createElement('div');
@@ -252,7 +267,6 @@ const LtxCard = (() => {
                     copyScopeAttributes(bodyEl, actionsEl);
                     bodyEl.appendChild(actionsEl);
                 }
-                const linkStr = entry.link.trim();
                 const sizeLabel = linkStr.startsWith('ed2k://')
                     ? `ed2k · ${((Number(linkStr.split('|', 4)[3]) || 0) / (1024 ** 3)).toFixed(1)}G`
                     : '마그넷';
@@ -498,12 +512,14 @@ const LtxCard = (() => {
     }
 
     function createInjectedCardElement(item, templateCard, onOpenListPicker) {
-        let scopeAttr = 'data-v-8e3d37a3';
-        if (templateCard) {
-            for (const attr of templateCard.attributes) {
+        let scopeAttr = '';
+        const scopeSource = templateCard || document.querySelector('main.main');
+        if (scopeSource) {
+            for (const attr of scopeSource.attributes) {
                 if (attr.name.startsWith('data-v-')) { scopeAttr = attr.name; break; }
             }
         }
+        if (!scopeAttr) scopeAttr = 'data-v-8e3d37a3';
 
         const code = LtxUtil.normalizeCode(item.code);
         const card = document.createElement('article');
@@ -689,7 +705,9 @@ const LtxCard = (() => {
         const params = new URLSearchParams(location.search);
         const actorParam = (params.get('actor') || '').trim();
         const qParam = (params.get('q') || '').trim();
-        const searchKeyword = actorParam || qParam;
+        const headerSearchInput = document.querySelector('#app > header > div.search-wrap > input, header .search-wrap input[type="search"]');
+        const activeQ = (qParam || headerSearchInput?.value || '').trim();
+        const searchKeyword = actorParam || activeQ;
         const insertMode = LtxActor.getSearchInsertMode();
 
         let gridEl = mainEl.querySelector('.grid');
@@ -785,7 +803,7 @@ const LtxCard = (() => {
 
         if (!searchKeyword) { cleanupInjected(); return; }
 
-        const sig = `${insertMode}::${actorParam ? 'actor:' + actorParam : 'q:' + qParam}`;
+        const sig = `${insertMode}::actor:${actorParam}::q:${activeQ}`;
         if (lastInjectedSignature !== sig) {
             mainEl.querySelectorAll('.grid-stage[data-ltx-search-stage="true"]').forEach(el => el.remove());
             if (emptyStage) emptyStage.style.display = '';
@@ -805,10 +823,32 @@ const LtxCard = (() => {
 
         const aliasNames = actorParam
             ? (insertMode === 'rep' ? getAliasActorsByQuery(actorParam) : [actorParam])
-            : (insertMode === 'rep' ? getAliasActorsByQuery(qParam) : []);
+            : (insertMode === 'rep' ? getAliasActorsByQuery(activeQ) : []);
         const aliasSet = new Set(aliasNames);
         const userEditedMap = typeof LtxIDB.getUserEditedMap === 'function' ? LtxIDB.getUserEditedMap() : {};
-        const qLower = qParam.toLowerCase();
+        const qLower = activeQ.toLowerCase();
+
+        const matchesQueryText = (item, code) => {
+            if (!qLower) return true;
+            if (code.toLowerCase().includes(qLower)) return true;
+            if (String(item.title || '').toLowerCase().includes(qLower)) return true;
+            if (String(item.title_zh || '').toLowerCase().includes(qLower)) return true;
+            if (String(item.maker || '').toLowerCase().includes(qLower)) return true;
+            if (Array.isArray(item.actors)) {
+                return item.actors.some(a => {
+                    const clean = String(a || '').trim();
+                    if (!clean) return false;
+                    if (clean.toLowerCase().includes(qLower) || (!actorParam && aliasSet.has(clean))) return true;
+                    const c = LtxActor.actorCache.get(clean);
+                    return Boolean(c && (
+                        (c.kName && c.kName.toLowerCase().includes(qLower)) ||
+                        (c.eName && c.eName.toLowerCase().includes(qLower)) ||
+                        (c.repName && c.repName.toLowerCase().includes(qLower))
+                    ));
+                });
+            }
+            return false;
+        };
 
         const tpl = allCards.find(c => !c.dataset.ltxAliasInjected) || allCards[0] || null;
         const matched = [];
@@ -820,26 +860,15 @@ const LtxCard = (() => {
 
             let isMatch = false;
             if (actorParam) {
-                isMatch = Array.isArray(item.actors) && item.actors.some(a => aliasSet.has(String(a).trim()));
-            } else if (qParam) {
+                const actorMatch = Array.isArray(item.actors) && item.actors.some(a => aliasSet.has(String(a).trim()));
+                if (actorMatch) {
+                    isMatch = activeQ ? matchesQueryText(item, code) : true;
+                }
+            } else if (activeQ) {
                 if (insertMode === 'rep' && aliasNames.length > 1 && Array.isArray(item.actors) && item.actors.some(a => aliasSet.has(String(a).trim()))) {
                     isMatch = true;
                 } else if (userEditedMap[code] || userEditedMap[String(item.code || '').trim()]) {
-                    if (code.toLowerCase().includes(qLower) || String(item.title || '').toLowerCase().includes(qLower)) {
-                        isMatch = true;
-                    } else if (Array.isArray(item.actors)) {
-                        isMatch = item.actors.some(a => {
-                            const clean = String(a || '').trim();
-                            if (!clean) return false;
-                            if (clean.toLowerCase().includes(qLower) || aliasSet.has(clean)) return true;
-                            const c = LtxActor.actorCache.get(clean);
-                            return Boolean(c && (
-                                (c.kName && c.kName.toLowerCase().includes(qLower)) ||
-                                (c.eName && c.eName.toLowerCase().includes(qLower)) ||
-                                (c.repName && c.repName.toLowerCase().includes(qLower))
-                            ));
-                        });
-                    }
+                    isMatch = matchesQueryText(item, code);
                 }
             }
 
@@ -861,7 +890,8 @@ const LtxCard = (() => {
                 frag.appendChild(el);
             }
             mountInsertedCards(gridEl, frag, inserted);
-        } else if (!gridEl) {
+        } else {
+            mainEl.querySelectorAll('.grid-stage[data-ltx-search-stage="true"]').forEach(el => el.remove());
             if (emptyStage) emptyStage.style.display = '';
         }
         syncBarStatsAndActions(notifyFn);
@@ -1092,9 +1122,8 @@ const LtxCard = (() => {
             }
         }
 
-        panel.querySelectorAll('[data-ltx-user-actor="true"]').forEach(el => el.remove());
-
-        const nativeSpans = Array.from(panel.querySelectorAll('span.name[lang="ja"]'));
+        const nativeSpans = Array.from(panel.querySelectorAll('span.name[lang="ja"]'))
+            .filter(sp => !sp.closest('[data-ltx-user-actor="true"]'));
         const existingJNames = new Set();
         let templateRow = null;
         let listContainer = null;
@@ -1136,6 +1165,12 @@ const LtxCard = (() => {
             }
             toInject.push(jName);
         }
+
+        const nextSig = `${panelQuery}::${existingJNames.size}::${toInject.map(j => `${j}:${actorWorkCounts.get(j) || 1}`).join(',')}`;
+        if (panel.dataset.ltxUserActorSig === nextSig) return;
+        panel.dataset.ltxUserActorSig = nextSig;
+
+        panel.querySelectorAll('[data-ltx-user-actor="true"]').forEach(el => el.remove());
 
         if (toInject.length === 0) return;
 
