@@ -108,6 +108,57 @@ const LtxCard = (() => {
         }
     }
 
+    function bindTagsHorizontalDrag(tagsEl) {
+        if (!tagsEl || tagsEl.dataset.ltxDragBound === 'true') return;
+        tagsEl.dataset.ltxDragBound = 'true';
+
+        let isDown = false;
+        let didDrag = false;
+        let startX = 0;
+        let startScrollLeft = 0;
+
+        tagsEl.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0) return;
+            isDown = true;
+            didDrag = false;
+            startX = e.clientX;
+            startScrollLeft = tagsEl.scrollLeft;
+        });
+
+        const onPointerMove = (e) => {
+            if (!isDown) return;
+            const dx = e.clientX - startX;
+            if (!didDrag && Math.abs(dx) > 4) {
+                didDrag = true;
+                tagsEl.classList.add('dragging');
+            }
+            if (didDrag) {
+                tagsEl.scrollLeft = startScrollLeft - dx;
+            }
+        };
+
+        const onPointerUp = () => {
+            if (!isDown) return;
+            isDown = false;
+            tagsEl.classList.remove('dragging');
+            if (didDrag) {
+                setTimeout(() => { didDrag = false; }, 0);
+            }
+        };
+
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+        window.addEventListener('pointercancel', onPointerUp);
+
+        tagsEl.addEventListener('click', (e) => {
+            if (didDrag) {
+                e.preventDefault();
+                e.stopPropagation();
+                didDrag = false;
+            }
+        }, true);
+    }
+
     function openCoverViewerDialog(code, title, coverUrl) {
         if (!coverUrl) return;
         document.querySelectorAll('dialog.viewer[data-ltx-user-viewer="true"]').forEach(d => d.remove());
@@ -293,6 +344,7 @@ const LtxCard = (() => {
                 }
                 if (tagsDiv.children.length > 0) {
                     whoEl.prepend(tagsDiv);
+                    bindTagsHorizontalDrag(tagsDiv);
                     if (typeof LtxActor !== 'undefined') {
                         tagsDiv.querySelectorAll(LtxActor.ACTOR_SPAN_SELECTOR).forEach(LtxActor.bindActorSpan);
                     }
@@ -718,6 +770,8 @@ const LtxCard = (() => {
                 setTimeout(() => btn.classList.remove('done'), 1200);
             }
         });
+
+        bindTagsHorizontalDrag(card.querySelector('.who .tags'));
 
         card.querySelectorAll('button.tag-name').forEach(btn => {
             btn.addEventListener('click', (e) => {
