@@ -108,6 +108,40 @@ const LtxCard = (() => {
         }
     }
 
+    function openCoverViewerDialog(code, title, coverUrl) {
+        if (!coverUrl) return;
+        document.querySelectorAll('dialog.viewer[data-ltx-user-viewer="true"]').forEach(d => d.remove());
+
+        const dialog = document.createElement('dialog');
+        dialog.className = 'viewer';
+        dialog.dataset.ltxUserViewer = 'true';
+        dialog.setAttribute('aria-label', `${code} 표지`);
+
+        const appEl = document.querySelector('#app');
+        if (appEl) copyScopeAttributes(appEl, dialog);
+
+        dialog.innerHTML = `
+            <button class="close" type="button" aria-label="닫기 (Esc)" autofocus>
+                <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <use href="#i-close"></use>
+                </svg>
+            </button>
+            <img class="ready" src="${LtxUtil.escapeHtml(coverUrl)}" alt="${LtxUtil.escapeHtml(code)} 표지" referrerpolicy="no-referrer" />
+            <p><b>${LtxUtil.escapeHtml(code)}</b><span lang="ja">${LtxUtil.escapeHtml(title || '')}</span></p>
+        `;
+
+        const closeBtn = dialog.querySelector('.close');
+        closeBtn?.addEventListener('click', () => dialog.close());
+        dialog.addEventListener('click', (e) => {
+            if (e.target === dialog) dialog.close();
+        });
+        dialog.addEventListener('close', () => dialog.remove());
+
+        document.body.appendChild(dialog);
+        if (typeof dialog.showModal === 'function') dialog.showModal();
+        else dialog.setAttribute('open', '');
+    }
+
     function getUserEditedEntry(code) {
         if (typeof LtxIDB === 'undefined' || typeof LtxIDB.getUserEditedMap !== 'function') return null;
         const map = LtxIDB.getUserEditedMap();
@@ -167,6 +201,15 @@ const LtxCard = (() => {
 
                 coverEl.classList.add('loading');
                 coverBtn.appendChild(imgEl);
+                coverBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const curTitle = (card.querySelector('.body h3.title button.title-btn')?.textContent
+                        || card.querySelector('.body h3.title')?.textContent
+                        || entry.title
+                        || '').trim();
+                    openCoverViewerDialog(normCode, curTitle, targetCover);
+                });
                 const codeBtn = coverEl.querySelector('button.code');
                 if (codeBtn) coverEl.insertBefore(coverBtn, codeBtn);
                 else coverEl.appendChild(coverBtn);
@@ -590,10 +633,20 @@ const LtxCard = (() => {
         card.querySelectorAll('*').forEach(el => { if (!el.closest('.ltx-ext-menu-wrap')) el.setAttribute(scopeAttr, ''); });
 
         const coverEl = card.querySelector('.cover');
-        const imgEl = card.querySelector('.cover-btn img');
+        const coverBtn = card.querySelector('.cover-btn');
+        const imgEl = coverBtn?.querySelector('img');
         if (imgEl && coverEl) {
             imgEl.addEventListener('load', () => { imgEl.classList.add('in'); coverEl.classList.remove('loading'); });
-            imgEl.addEventListener('error', () => { coverEl.classList.remove('loading'); imgEl.closest('.cover-btn')?.remove(); });
+            imgEl.addEventListener('error', () => { coverEl.classList.remove('loading'); coverBtn?.remove(); });
+            if (imgEl.complete && imgEl.naturalWidth > 0) {
+                imgEl.classList.add('in');
+                coverEl.classList.remove('loading');
+            }
+            coverBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openCoverViewerDialog(code, title, cover);
+            });
         }
 
         card.querySelector('button.tool.want')?.addEventListener('click', (e) => {

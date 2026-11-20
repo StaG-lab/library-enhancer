@@ -1160,6 +1160,74 @@ article.card:focus-within .ltx-ext-menu-wrap,
     padding-top: 4px;
 }
 
+/* 사용자 보완 표지 확대 뷰어 다이얼로그 */
+dialog.viewer[data-ltx-user-viewer="true"] {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    padding: 16px;
+    border: none;
+    background: transparent;
+    color: #f8fafc;
+    max-width: min(92vw, 960px);
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    overflow: visible;
+}
+
+dialog.viewer[data-ltx-user-viewer="true"]::backdrop {
+    background: rgba(8, 9, 13, 0.84);
+    backdrop-filter: blur(4px);
+}
+
+dialog.viewer[data-ltx-user-viewer="true"] .close {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(23, 24, 29, 0.85);
+    color: #f8fafc;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+dialog.viewer[data-ltx-user-viewer="true"] .close:hover {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+dialog.viewer[data-ltx-user-viewer="true"] img.ready {
+    max-width: 100%;
+    max-height: calc(92vh - 90px);
+    object-fit: contain;
+    border-radius: 10px;
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.65);
+}
+
+dialog.viewer[data-ltx-user-viewer="true"] p {
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    text-align: center;
+    font-size: 0.875rem;
+    color: #e2e8f0;
+}
+
+dialog.viewer[data-ltx-user-viewer="true"] p b {
+    color: #4cd498;
+    font-weight: 700;
+}
+
 @media (max-width: 720px) {
     .ltx-actor-row,
     .ltx-modal-add-bar {
