@@ -393,8 +393,27 @@ const LtxCard = (() => {
         document.querySelectorAll('article.card').forEach(applyUserDataToCard);
     }
 
+    const CARD_SCOPE_CACHE_KEY = 'ltx_card_scope_attr_v1';
+    let cachedCardScopeAttr = LtxUtil.store.get(CARD_SCOPE_CACHE_KEY, 'data-v-28f1568d') || 'data-v-28f1568d';
+
+    function captureCardScopeAttr(card) {
+        if (!card || card.dataset.ltxAliasInjected === 'true') return;
+        const innerEl = card.querySelector('.cover, .body, button.code');
+        const src = innerEl || card;
+        for (const attr of src.attributes) {
+            if (attr.name.startsWith('data-v-')) {
+                if (cachedCardScopeAttr !== attr.name) {
+                    cachedCardScopeAttr = attr.name;
+                    LtxUtil.store.set(CARD_SCOPE_CACHE_KEY, cachedCardScopeAttr);
+                }
+                return;
+            }
+        }
+    }
+
     function modifyCard(card) {
         if (!card.dataset.code) return;
+        captureCardScopeAttr(card);
         applyUserDataToCard(card);
         if (card.dataset.processed) return;
         const dataCode = card.dataset.code.trim();
@@ -612,13 +631,13 @@ const LtxCard = (() => {
 
     function createInjectedCardElement(item, templateCard, onOpenListPicker) {
         let scopeAttr = '';
-        const scopeSource = templateCard || document.querySelector('main.main');
-        if (scopeSource) {
-            for (const attr of scopeSource.attributes) {
+        if (templateCard) {
+            const innerTpl = templateCard.querySelector('.cover, .body, button.code') || templateCard;
+            for (const attr of innerTpl.attributes) {
                 if (attr.name.startsWith('data-v-')) { scopeAttr = attr.name; break; }
             }
         }
-        if (!scopeAttr) scopeAttr = 'data-v-8e3d37a3';
+        if (!scopeAttr) scopeAttr = cachedCardScopeAttr || 'data-v-28f1568d';
 
         const code = LtxUtil.normalizeCode(item.code);
         const card = document.createElement('article');
@@ -682,6 +701,8 @@ const LtxCard = (() => {
         `;
 
         card.setAttribute(scopeAttr, '');
+        const mainElForScope = document.querySelector('main.main');
+        if (mainElForScope) copyScopeAttributes(mainElForScope, card);
         card.querySelectorAll('*').forEach(el => { if (!el.closest('.ltx-ext-menu-wrap')) el.setAttribute(scopeAttr, ''); });
 
         const coverEl = card.querySelector('.cover');
