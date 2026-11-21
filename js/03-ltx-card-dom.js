@@ -1032,6 +1032,10 @@ const LtxCard = (() => {
             mainEl.querySelectorAll('.grid-stage[data-ltx-search-stage="true"]').forEach(el => el.remove());
             if (emptyStage && emptyStage.style.display !== '') emptyStage.style.display = '';
         }
+
+        if (mainEl.querySelector('.grid-stage[data-ltx-search-stage="true"] article.card')) {
+            if (emptyStage && emptyStage.style.display !== 'none') emptyStage.style.display = 'none';
+        }
         syncBarStatsAndActions(notifyFn);
     }
 
