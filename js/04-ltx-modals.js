@@ -501,13 +501,13 @@ const LtxModal = (() => {
         else window.open(url, '_blank', 'noopener,noreferrer');
     }
 
-    // 3. IndexedDB 작품 데이터 누락 점검 및 정리 모달
+    // 3.누락 데이터 점검 및 정리 모달
     function openIdbAuditModal() {
         let filterType = 'all_missing', query = '', editingCode = null;
         const selectedCodes = new Set();
 
         const { modal } = LtxUI.createModal({
-            title: 'IndexedDB 작품 데이터 점검 및 정리',
+            title: '누락 데이터 점검 및 정리',
             badgeHtml: `<span class="ltx-ext-limit-badge" id="idb-total-badge">(총 ${LtxIDB.items.size}편)</span>`,
             fixedHeight: true,
             innerHtml: `
@@ -567,7 +567,7 @@ const LtxModal = (() => {
                                     <circle cx="11" cy="11" r="8"></circle>
                                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                                 </svg>
-                                <input type="text" class="ltx-actor-input edit-actor-ac" placeholder="저장된 배우 캐시에서 자동완성 추가 (한글/초성/영문/일본어)…" />
+                                <input type="text" class="ltx-actor-input edit-actor-ac" placeholder="기등록된 배우이름 검색해서 추가 (한글/초성/영문/일본어)…" />
                             </div>
                             <div class="ltx-audit-actor-ac-list" style="display:none;"></div>
                         </div>
@@ -772,6 +772,25 @@ const LtxModal = (() => {
                 t.textContent = `${tabLabels[f] || f} (${stats[f].length})`;
             });
 
+            const getAuditTimestamp = (it) => {
+                const raw = it?.added_at || it?.date || '';
+                if (!raw) return 0;
+                const ms = typeof raw === 'number' ? raw : Date.parse(raw);
+                return Number.isFinite(ms) ? ms : 0;
+            };
+            const formatAuditDate = (it) => {
+                if (it?.added_at) {
+                    const d = new Date(it.added_at);
+                    if (!isNaN(d.getTime())) {
+                        const pad = (n) => String(n).padStart(2, '0');
+                        return `추가 ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                    }
+                    return `추가 ${String(it.added_at).slice(0, 10)}`;
+                }
+                if (it?.date) return `발매 ${it.date}`;
+                return '날짜 없음';
+            };
+
             let pool = filterType === 'user_edited' ? stats.user_edited : stats.all_missing;
             if (filterType === 'no_link') pool = pool.filter(x => x.ml);
             if (filterType === 'no_actors') pool = pool.filter(x => x.ma);
@@ -780,6 +799,7 @@ const LtxModal = (() => {
                 const q = query.toLowerCase();
                 pool = pool.filter(x => String(x.item.code).toLowerCase().includes(q) || String(x.item.title || '').toLowerCase().includes(q));
             }
+            pool = pool.slice().sort((a, b) => getAuditTimestamp(a.item) - getAuditTimestamp(b.item));
             currentFiltered = pool;
             selCntEl.textContent = String(selectedCodes.size);
             bodyEl.innerHTML = pool.length ? '' : `<div class="ltx-modal-empty">${filterType === 'user_edited' ? '직접 편집한 작품 데이터가 없습니다.' : '누락된 작품 데이터가 없습니다.'}</div>`;
@@ -787,6 +807,7 @@ const LtxModal = (() => {
             const frag = document.createDocumentFragment();
             for (const { item, ml, ma, mc, isUserEdited } of pool.slice(0, 100)) {
                 const tags = [ml && 'link 없음', ma && 'actors 없음', mc && 'cover 없음'].filter(Boolean);
+                const dateLabel = formatAuditDate(item);
                 const wrap = document.createElement('div');
                 wrap.className = 'ltx-audit-item-wrap';
 
@@ -796,7 +817,7 @@ const LtxModal = (() => {
                     <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
                         <input type="checkbox" class="ltx-row-select-chk" ${selectedCodes.has(item.code) ? 'checked' : ''} />
                         <div class="ltx-ext-site-info">
-                            <div class="ltx-ext-site-title">${LtxUtil.escapeHtml(item.code)} ${tags.length ? `<span style="color:#fbbf24;font-size:0.75rem;">[${tags.join(' · ')}]</span>` : `<span style="color:#4cd498;font-size:0.75rem;">[누락 없음]</span>`} ${isUserEdited ? `<span class="ltx-audit-edited-badge">직접 편집</span>` : ''}</div>
+                            <div class="ltx-ext-site-title">${LtxUtil.escapeHtml(item.code)} ${tags.length ? `<span style="color:#fbbf24;font-size:0.75rem;">[${tags.join(' · ')}]</span>` : `<span style="color:#4cd498;font-size:0.75rem;">[누락 없음]</span>`} ${isUserEdited ? `<span class="ltx-audit-edited-badge">직접 편집</span>` : ''} <span style="color:#94a3b8;font-size:0.72rem;font-weight:400;margin-left:4px;">${LtxUtil.escapeHtml(dateLabel)}</span></div>
                             <div class="ltx-ext-site-url">${LtxUtil.escapeHtml(item.title || '(제목 없음)')}</div>
                         </div>
                     </div>

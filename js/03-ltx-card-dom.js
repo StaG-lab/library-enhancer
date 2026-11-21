@@ -860,7 +860,7 @@ const LtxCard = (() => {
             copyScopeAttributes(mainEl, gridStage);
             copyScopeAttributes(mainEl, newGrid);
             newGrid.style.display = 'grid';
-            newGrid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(230px, 1fr))';
+            newGrid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(200px, 1fr))';
             newGrid.style.gap = '16px';
             gridStage.appendChild(newGrid);
             if (emptyStage) { emptyStage.style.display = 'none'; emptyStage.insertAdjacentElement('afterend', gridStage); }
@@ -879,10 +879,19 @@ const LtxCard = (() => {
             }
         } else {
             mainEl.querySelectorAll('.grid-stage[data-ltx-want-stage="true"]').forEach(el => el.remove());
+            const nextSig = `${insertMode}::actor:${actorParam}::q:${activeQ}`;
+            if (lastInjectedSignature && lastInjectedSignature !== nextSig) {
+                mainEl.querySelectorAll('.grid-stage[data-ltx-search-stage="true"]').forEach(el => el.remove());
+                mainEl.querySelectorAll('article.card[data-ltx-alias-injected="true"]').forEach(el => el.remove());
+                lastInjectedSignature = '';
+            }
             gridEl = mainEl.querySelector('.grid');
         }
 
-        if (gridEl && (gridEl.classList.contains('stale') || gridEl.getAttribute('aria-busy') === 'true')) return;
+        if (gridEl && (gridEl.classList.contains('stale') || gridEl.getAttribute('aria-busy') === 'true')) {
+            syncBarStatsAndActions(notifyFn);
+            return;
+        }
 
         const cleanupInjected = () => {
             mainEl.querySelectorAll('.grid-stage[data-ltx-search-stage="true"]').forEach(el => el.remove());
@@ -1046,16 +1055,17 @@ const LtxCard = (() => {
         const params = new URLSearchParams(location.search);
         const searchKeyword = (params.get('actor') || params.get('q') || '').trim();
         const gridEl = mainEl.querySelector('.grid');
+        const isGridBusy = Boolean(gridEl && (gridEl.classList.contains('stale') || gridEl.getAttribute('aria-busy') === 'true'));
         const allCards = gridEl ? Array.from(gridEl.querySelectorAll('article.card')) : [];
         const injectedCards = gridEl ? Array.from(gridEl.querySelectorAll('article.card[data-ltx-alias-injected="true"]')) : [];
-        const active = Boolean((location.hash === '#want' || searchKeyword) && injectedCards.length > 0);
+        const active = Boolean(!isGridBusy && (location.hash === '#want' || searchKeyword) && injectedCards.length > 0);
 
-        const allEl = mainEl.querySelector('div.status > button.seg.all > i');
-        const okEl = mainEl.querySelector('div.status > button.seg.ok > i');
-        const penEl = mainEl.querySelector('div.status > button.seg.pending > i');
+        const allEl = mainEl.querySelector('div.status > button.seg.all > i:not(.ltx-bar-stat-override)');
+        const okEl = mainEl.querySelector('div.status > button.seg.ok > i:not(.ltx-bar-stat-override)');
+        const penEl = mainEl.querySelector('div.status > button.seg.pending > i:not(.ltx-bar-stat-override)');
         const batchBtn = mainEl.querySelector('div.bar-end > button');
-        const batchCntEl = batchBtn?.querySelector('b');
-        const resultSpan = mainEl.querySelector('div.bar-end > span.result');
+        const batchCntEl = batchBtn?.querySelector('b:not(.ltx-bar-stat-override)');
+        const resultSpan = mainEl.querySelector('div.bar-end > span.result:not(.ltx-bar-stat-override)');
 
         // 4) #want 뷰에서 main > div.bar > button.tool.save-want 숫자 동기화
         const saveWantBtn = mainEl.querySelector('div.bar > button.tool.save-want');
@@ -1063,10 +1073,8 @@ const LtxCard = (() => {
             const wantCount = getMergedWantSet().size;
             const badge = saveWantBtn.querySelector('b, span.count, i');
             if (badge) {
-                if (badge.dataset.ltxOrigText === undefined) badge.dataset.ltxOrigText = badge.textContent;
                 if (badge.textContent !== String(wantCount)) badge.textContent = String(wantCount);
             } else {
-                // 숫자만 텍스트 노드로 들어있는 경우 치환
                 for (const node of saveWantBtn.childNodes) {
                     if (node.nodeType === Node.TEXT_NODE && /\d+/.test(node.textContent)) {
                         const nextText = node.textContent.replace(/\d+/, String(wantCount));
@@ -1077,16 +1085,36 @@ const LtxCard = (() => {
             }
         }
 
+        const clearStatOverride = (origEl) => {
+            if (!origEl) return;
+            const ov = origEl.nextElementSibling;
+            if (ov && ov.classList.contains('ltx-bar-stat-override')) ov.remove();
+            if (origEl.style.display === 'none') origEl.style.display = '';
+        };
+
+        const setStatOverride = (origEl, val, isHtml = false) => {
+            if (!origEl) return;
+            let ov = origEl.nextElementSibling;
+            if (!ov || !ov.classList.contains('ltx-bar-stat-override')) {
+                ov = document.createElement(origEl.tagName.toLowerCase());
+                ov.className = `${origEl.className} ltx-bar-stat-override`.trim();
+                copyScopeAttributes(origEl, ov);
+                origEl.insertAdjacentElement('afterend', ov);
+            }
+            if (origEl.style.display !== 'none') origEl.style.display = 'none';
+            if (isHtml) {
+                if (ov.innerHTML !== String(val)) ov.innerHTML = String(val);
+            } else if (ov.textContent !== String(val)) {
+                ov.textContent = String(val);
+            }
+        };
+
         if (!active) {
-            [allEl, okEl, penEl, batchCntEl].forEach(el => {
-                if (el && el.dataset.ltxOrigText !== undefined) { el.textContent = el.dataset.ltxOrigText; delete el.dataset.ltxOrigText; }
-            });
+            if (isGridBusy) return;
+            [allEl, okEl, penEl, batchCntEl, resultSpan].forEach(clearStatOverride);
             if (batchBtn) {
                 if (batchBtn.dataset.ltxOrigTitle !== undefined) { batchBtn.setAttribute('title', batchBtn.dataset.ltxOrigTitle); delete batchBtn.dataset.ltxOrigTitle; }
                 delete batchBtn.dataset.ltxAliasCopyActive;
-            }
-            if (resultSpan && resultSpan.dataset.ltxOrigHtml !== undefined) {
-                resultSpan.innerHTML = resultSpan.dataset.ltxOrigHtml; delete resultSpan.dataset.ltxOrigHtml;
             }
             return;
         }
@@ -1112,21 +1140,15 @@ const LtxCard = (() => {
             if (item && typeof item.link === 'string' && item.link.trim()) links.push(item.link.trim());
         }
 
-        const setTxt = (el, val) => {
-            if (!el) return;
-            if (el.dataset.ltxOrigText === undefined) el.dataset.ltxOrigText = el.textContent;
-            if (el.textContent !== String(val)) el.textContent = String(val);
-        };
-
-        setTxt(allEl, total);
-        setTxt(okEl, ok);
-        setTxt(penEl, pending);
+        setStatOverride(allEl, total);
+        setStatOverride(okEl, ok);
+        setStatOverride(penEl, pending);
 
         if (batchBtn) {
             if (batchBtn.dataset.ltxOrigTitle === undefined) batchBtn.dataset.ltxOrigTitle = batchBtn.getAttribute('title') || '';
             const nextTitle = `${total}편 복사 또는 다운로드`;
             if (batchBtn.getAttribute('title') !== nextTitle) batchBtn.setAttribute('title', nextTitle);
-            setTxt(batchCntEl, total);
+            setStatOverride(batchCntEl, total);
 
             batchBtn._ltxMergedLinks = links;
             batchBtn.dataset.ltxAliasCopyActive = 'true';
@@ -1147,10 +1169,7 @@ const LtxCard = (() => {
         }
 
         if (resultSpan) {
-            if (resultSpan.dataset.ltxOrigHtml === undefined) resultSpan.dataset.ltxOrigHtml = resultSpan.innerHTML;
-            const b = resultSpan.querySelector('b');
-            if (b) { if (b.textContent !== String(total)) b.textContent = String(total); }
-            else { const h = `<b>${total}</b>건`; if (resultSpan.innerHTML !== h) resultSpan.innerHTML = h; }
+            setStatOverride(resultSpan, `<b>${total}</b>건`, true);
         }
     }
 
